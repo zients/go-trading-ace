@@ -6,7 +6,6 @@ CREATE TABLE tasks (
     points BIGINT NOT NULL,
     started_at TIMESTAMP NULL,
     end_at TIMESTAMP NULL,
-    is_recurring BOOLEAN DEFAULT FALSE,
     period INT DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

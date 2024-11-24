@@ -64,7 +64,6 @@ func (s *CampaignService) createOnboardingTask() error {
 		Points:      OnboardingTaskPoints,
 		StartedAt:   &startedAt,
 		EndAt:       &endAt,
-		IsRecurring: false,
 		Period:      1,
 	}
 
@@ -86,9 +85,8 @@ func (s *CampaignService) createSharePoolTask() error {
 	}
 
 	startedAt := time.Now().UTC()
-
 	for i := 1; i <= 4; i++ {
-		var duration = time.Duration(7*i) * 24 * time.Hour
+		var duration = 7 * 24 * time.Hour
 		endAt := startedAt.Add(duration)
 
 		newTask := &entities.Task{
@@ -97,13 +95,14 @@ func (s *CampaignService) createSharePoolTask() error {
 			Points:      SharePoolTaskPoints,
 			StartedAt:   &startedAt,
 			EndAt:       &endAt,
-			IsRecurring: true,
 			Period:      i,
 		}
 
 		if _, err := s.taskRepo.Create(newTask); err != nil {
 			return fmt.Errorf("failed to create task: %w", err)
 		}
+
+		startedAt = endAt
 	}
 
 	return nil
