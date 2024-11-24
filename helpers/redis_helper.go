@@ -24,19 +24,19 @@ type IRedisHelper interface {
 }
 
 type RedisHelper struct {
-	RedisClient *redis.Client
-	Prefix      string
+	redisClient *redis.Client
+	prefix      string
 }
 
 func NewRedisHelper(redisClient *redis.Client, config *config.Config) IRedisHelper {
 	return &RedisHelper{
-		RedisClient: redisClient,
-		Prefix:      config.Redis.Prefix,
+		redisClient: redisClient,
+		prefix:      config.Redis.Prefix,
 	}
 }
 
 func (r *RedisHelper) Set(key string, value string, expiration time.Duration) error {
-	err := r.RedisClient.Set(context.Background(), r.Prefix+key, value, expiration).Err()
+	err := r.redisClient.Set(context.Background(), r.prefix+key, value, expiration).Err()
 	if err != nil {
 		return fmt.Errorf("failed to set key %s: %w", key, err)
 	}
@@ -45,7 +45,7 @@ func (r *RedisHelper) Set(key string, value string, expiration time.Duration) er
 }
 
 func (r *RedisHelper) Get(key string) (string, error) {
-	val, err := r.RedisClient.Get(context.Background(), r.Prefix+key).Result()
+	val, err := r.redisClient.Get(context.Background(), r.prefix+key).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return "", fmt.Errorf("key %s does not exist", key)
@@ -58,7 +58,7 @@ func (r *RedisHelper) Get(key string) (string, error) {
 }
 
 func (r *RedisHelper) Delete(key string) error {
-	err := r.RedisClient.Del(context.Background(), r.Prefix+key).Err()
+	err := r.redisClient.Del(context.Background(), r.prefix+key).Err()
 	if err != nil {
 		return fmt.Errorf("failed to delete key %s: %w", key, err)
 	}
@@ -67,7 +67,7 @@ func (r *RedisHelper) Delete(key string) error {
 }
 
 func (r *RedisHelper) HSet(hash string, key string, value interface{}) error {
-	err := r.RedisClient.HSet(context.Background(), r.Prefix+hash, key, value).Err()
+	err := r.redisClient.HSet(context.Background(), r.prefix+hash, key, value).Err()
 	if err != nil {
 		return fmt.Errorf("failed to HSET field %s in hash %s: %w", key, hash, err)
 	}
@@ -75,7 +75,7 @@ func (r *RedisHelper) HSet(hash string, key string, value interface{}) error {
 }
 
 func (r *RedisHelper) HGet(hash string, key string) (string, error) {
-	val, err := r.RedisClient.HGet(context.Background(), r.Prefix+hash, key).Result()
+	val, err := r.redisClient.HGet(context.Background(), r.prefix+hash, key).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return "", fmt.Errorf("field %s does not exist in hash %s", key, hash)
@@ -86,7 +86,7 @@ func (r *RedisHelper) HGet(hash string, key string) (string, error) {
 }
 
 func (r *RedisHelper) ZAdd(key string, members ...*redis.Z) error {
-	err := r.RedisClient.ZAdd(context.Background(), r.Prefix+key, members...).Err()
+	err := r.redisClient.ZAdd(context.Background(), r.prefix+key, members...).Err()
 	if err != nil {
 		return fmt.Errorf("failed to ZADD to key %s: %w", key, err)
 	}
@@ -94,7 +94,7 @@ func (r *RedisHelper) ZAdd(key string, members ...*redis.Z) error {
 }
 
 func (r *RedisHelper) ZRange(key string, start, stop int64) ([]string, error) {
-	vals, err := r.RedisClient.ZRange(context.Background(), r.Prefix+key, start, stop).Result()
+	vals, err := r.redisClient.ZRange(context.Background(), r.prefix+key, start, stop).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to ZRANGE key %s: %w", key, err)
 	}
@@ -102,7 +102,7 @@ func (r *RedisHelper) ZRange(key string, start, stop int64) ([]string, error) {
 }
 
 func (r *RedisHelper) ZRangeWithScores(key string, start, stop int64) ([]string, []float64, error) {
-	result, err := r.RedisClient.ZRangeWithScores(context.Background(), r.Prefix+key, start, stop).Result()
+	result, err := r.redisClient.ZRangeWithScores(context.Background(), r.prefix+key, start, stop).Result()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get range with scores from ZSET %s: %w", key, err)
 	}
@@ -119,7 +119,7 @@ func (r *RedisHelper) ZRangeWithScores(key string, start, stop int64) ([]string,
 }
 
 func (r *RedisHelper) ZRevRange(key string, start, stop int64) ([]string, error) {
-	vals, err := r.RedisClient.ZRevRange(context.Background(), r.Prefix+key, start, stop).Result()
+	vals, err := r.redisClient.ZRevRange(context.Background(), r.prefix+key, start, stop).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to ZRANGE key %s: %w", key, err)
 	}
@@ -127,7 +127,7 @@ func (r *RedisHelper) ZRevRange(key string, start, stop int64) ([]string, error)
 }
 
 func (r *RedisHelper) ZRevRangeWithScores(key string, start, stop int64) ([]string, []float64, error) {
-	result, err := r.RedisClient.ZRevRangeWithScores(context.Background(), r.Prefix+key, start, stop).Result()
+	result, err := r.redisClient.ZRevRangeWithScores(context.Background(), r.prefix+key, start, stop).Result()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get range with scores from ZSET %s: %w", key, err)
 	}
@@ -144,7 +144,7 @@ func (r *RedisHelper) ZRevRangeWithScores(key string, start, stop int64) ([]stri
 }
 
 func (r *RedisHelper) SetTTL(key string, expiration time.Duration) error {
-	err := r.RedisClient.Expire(context.Background(), r.Prefix+key, expiration).Err()
+	err := r.redisClient.Expire(context.Background(), r.prefix+key, expiration).Err()
 	if err != nil {
 		return fmt.Errorf("failed to set key %s: %w", key, err)
 	}
