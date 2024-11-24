@@ -29,5 +29,5 @@ func (h *CampaignController) StartCampaign(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(200, nil)
+	ctx.JSON(200, gin.H{"status": "ok"})
 }
