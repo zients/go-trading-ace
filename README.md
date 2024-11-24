@@ -53,12 +53,12 @@ Before getting started, ensure that you have the following software installed on
 2. **Run Migrations**
     Run the database migrations to set up the schema in the database:
     ```
-    migrate -path=migrations -database "postgres://username:password@localhost:5432/go-trading-ace?sslmode=disable" up
+    migrate -path=migrations -database "postgres://username:password@localhost:5432/trading-ace?sslmode=disable" up
     ```
 3. **Rollback Migrations**
     If you need to rollback the migrations, you can use:
     ```
-    migrate -path=migrations -database "postgres://username:password@localhost:5432/go-trading-ace?sslmode=disable" down
+    migrate -path=migrations -database "postgres://username:password@localhost:5432/trading-ace?sslmode=disable" down
     ```
 
 ### Running Tests
