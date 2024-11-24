@@ -8,6 +8,7 @@ import (
 	"trading-ace/controllers"
 	"trading-ace/helpers"
 	"trading-ace/logger"
+	"trading-ace/repositories"
 	"trading-ace/routes"
 
 	"github.com/gin-gonic/gin"
@@ -81,6 +82,9 @@ func main() {
 
 			// Controllers
 			controllers.NewHomeController,
+
+			// Repositories
+			repositories.NewUserRepository,
 
 			// Routes
 			routes.NewHomeRoutes,
