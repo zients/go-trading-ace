@@ -88,8 +88,8 @@ func (s *CampaignService) createSharePoolTask() error {
 	startedAt := time.Now().UTC()
 
 	for i := 1; i <= 4; i++ {
-		var duration = time.Duration(7*i*24) * time.Hour
-		endAt := startedAt.Add((duration * time.Hour))
+		var duration = time.Duration(7*i) * 24 * time.Hour
+		endAt := startedAt.Add(duration)
 
 		newTask := &entities.Task{
 			Name:        SharePoolTaskStr,
@@ -98,7 +98,7 @@ func (s *CampaignService) createSharePoolTask() error {
 			StartedAt:   &startedAt,
 			EndAt:       &endAt,
 			IsRecurring: true,
-			Period:      1,
+			Period:      i,
 		}
 
 		if _, err := s.taskRepo.Create(newTask); err != nil {
