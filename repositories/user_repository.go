@@ -25,7 +25,6 @@ func NewUserRepository(db *sql.DB) IUserRepository {
 }
 
 func (u *UserRepository) Create(address string) (*entities.User, error) {
-	// 插入資料
 	query := `
 		INSERT INTO users (address, created_at, updated_at)
 		VALUES ($1, $2, $3) RETURNING id, address, created_at, updated_at
