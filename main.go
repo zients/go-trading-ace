@@ -11,6 +11,8 @@ import (
 	"trading-ace/repositories"
 	"trading-ace/routes"
 
+	_ "github.com/lib/pq"
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"go.uber.org/fx"
@@ -19,12 +21,13 @@ import (
 var ctx = context.Background()
 
 func NewDB(config *config.Config) (*sql.DB, error) {
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s",
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		config.Database.User,
 		config.Database.Password,
 		config.Database.Host,
 		config.Database.Port,
 		config.Database.Name,
+		config.Database.SSLMode,
 	)
 
 	db, err := sql.Open("postgres", connStr)

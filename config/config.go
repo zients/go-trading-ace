@@ -20,6 +20,7 @@ type DatabaseConfig struct {
 	Password string `mapstructure:"password"`
 	Name     string `mapstructure:"name"`
 	Port     int    `mapstructure:"port"`
+	SSLMode  string `mapstructure:"sslmode"`
 }
 
 type RedisConfig struct {
