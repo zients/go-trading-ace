@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -23,6 +24,9 @@ type EthereumService struct {
 	logger logger.ILogger
 	config *config.Config
 }
+
+const wethDecimals int64 = 18
+const usdcDecimals int64 = 6
 
 func NewEthereumService(logger logger.ILogger, config *config.Config) IEthereumService {
 	return &EthereumService{
@@ -95,9 +99,13 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 		return fmt.Errorf("failed to parse ABI: %v", err)
 	}
 
+	eventSignature := "Swap(address,uint256,uint256,uint256,uint256,address)"
+	eventSignatureHash := crypto.Keccak256Hash([]byte(eventSignature))
+
 	// 計算事件簽名的哈希
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
+		Topics:    [][]common.Hash{{eventSignatureHash}},
 	}
 
 	logsCh := make(chan types.Log)
@@ -127,7 +135,6 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 		e.logger.Info("Sender: %s", vLog.Topics[1].Hex()[26:])
 		e.logger.Info("To: %s", vLog.Topics[2].Hex()[26:])
 
-		var usdcDecimals int64 = 6
 		amountInUSDC := new(big.Float).SetInt(event.Amount0In)
 		amountInUSDC.Quo(amountInUSDC, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(usdcDecimals), nil)))
 		e.logger.Info("Amount0In (USDC): %s", amountInUSDC.String())
@@ -136,7 +143,6 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 		amountOutUSDC.Quo(amountOutUSDC, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(usdcDecimals), nil)))
 		e.logger.Info("Amount0Out (USDC): %s", amountOutUSDC.String())
 
-		var wethDecimals int64 = 18
 		amountInWETH := new(big.Float).SetInt(event.Amount1In)
 		amountInWETH.Quo(amountInWETH, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(wethDecimals), nil)))
 		e.logger.Info("Amount1In (WETH): %s", amountInWETH.String())
