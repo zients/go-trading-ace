@@ -1,4 +1,4 @@
-module go-uniswap
+module trading-ace
 
 go 1.22.2
 
