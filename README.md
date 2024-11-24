@@ -33,17 +33,20 @@ Before getting started, ensure that you have the following software installed on
     ```
     docker-compose up --build
     ```
-3. Run the Project Locally (Without Docker)
-    If you prefer to run the project locally, follow these steps:
-    - Download the necessary dependencies:  
-        ```
-        go mod tidy
-        ```
+3. Run the Project Locally (Without Docker)  
+   If you prefer to run the project locally, follow these steps:  
 
-    - Run the application:
-        ```
-        go run main.go
-        ```
+   - Download the necessary dependencies:  
+     ```bash
+     go mod tidy
+     ```  
+
+   - Configure the database and Redis using `./config/config.yml`. 
+
+   - Run the application:  
+     ```bash
+     go run main.go
+     ```
 
 ### Database Migration
 
