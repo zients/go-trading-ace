@@ -10,6 +10,7 @@ import (
 	"trading-ace/logger"
 	"trading-ace/repositories"
 	"trading-ace/routes"
+	"trading-ace/services"
 
 	_ "github.com/lib/pq"
 
@@ -66,8 +67,10 @@ func SetupServer(
 	r *gin.Engine,
 	config *config.Config,
 	homeRoutes routes.IHomeRoutes,
+	campaignRoutes routes.ICampaignRoutes,
 ) {
 	homeRoutes.RegisterHomeRoutes()
+	campaignRoutes.RegisterCampaignRoutes()
 
 	r.Run(fmt.Sprintf(":%d", config.Server.Port))
 }
@@ -85,6 +88,7 @@ func main() {
 
 			// Controllers
 			controllers.NewHomeController,
+			controllers.NewCampaignController,
 
 			// Repositories
 			repositories.NewTaskRepository,
@@ -92,6 +96,10 @@ func main() {
 
 			// Routes
 			routes.NewHomeRoutes,
+			routes.NewCampaignRoutes,
+
+			// Services
+			services.NewCampaignService,
 
 			// Helper
 			helpers.NewRedisHelper,
