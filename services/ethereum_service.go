@@ -124,8 +124,8 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 			continue
 		}
 
-		e.logger.Info("Sender: %s", event.Sender.Hex())
-		e.logger.Info("To: %s", event.To.Hex())
+		e.logger.Info("Sender: %s", vLog.Topics[1].Hex()[26:])
+		e.logger.Info("To: %s", vLog.Topics[2].Hex()[26:])
 
 		var usdcDecimals int64 = 6
 		amountInUSDC := new(big.Float).SetInt(event.Amount0In)
