@@ -8,6 +8,7 @@ type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
 	Redis    RedisConfig    `mapstructure:"redis"`
+	Infura   InfuraConfig   `mapstructure:"infura"`
 }
 
 type ServerConfig struct {
@@ -27,6 +28,10 @@ type RedisConfig struct {
 	Prefix string `mapstructure:"prefix"`
 	Host   string `mapstructure:"host"`
 	Port   int    `mapstructure:"port"`
+}
+
+type InfuraConfig struct {
+	Key string `mapstructure:"key"`
 }
 
 func LoadConfig() (*Config, error) {
