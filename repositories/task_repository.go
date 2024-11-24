@@ -35,7 +35,7 @@ func (t *TaskRepository) Create(task *entities.Task) (*entities.Task, error) {
 	err := t.db.QueryRow(
 		query,
 		task.Name, task.Description, task.Points,
-		task.StartedAt, task.EndAt, task.IsRecurring,
+		task.StartedAt, task.EndAt, task.IsRecurring, task.Period,
 	).Scan(
 		&createdTask.ID, &createdTask.Name, &createdTask.Description,
 		&createdTask.Points, &createdTask.StartedAt, &createdTask.EndAt,

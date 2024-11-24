@@ -24,7 +24,10 @@ func NewCampaignController(config *config.Config, campaignService services.ICamp
 }
 
 func (h *CampaignController) StartCampaign(ctx *gin.Context) {
-	h.campaignService.StartCampaign()
+	if err := h.campaignService.StartCampaign(); err != nil {
+		ctx.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
 
 	ctx.JSON(200, nil)
 }
