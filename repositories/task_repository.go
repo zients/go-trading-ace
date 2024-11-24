@@ -3,13 +3,13 @@ package repositories
 import (
 	"database/sql"
 	"fmt"
-	entity "trading-ace/entities"
+	"trading-ace/entities"
 )
 
 type ITaskRepository interface {
-	Create(task *entity.Task) (*entity.Task, error)
-	FindById(id int64) (*entity.Task, error)
-	Update(task *entity.Task) (*entity.Task, error)
+	Create(task *entities.Task) (*entities.Task, error)
+	FindById(id int64) (*entities.Task, error)
+	Update(task *entities.Task) (*entities.Task, error)
 	Delete(id int64) error
 }
 
@@ -23,14 +23,14 @@ func NewTaskRepository(db *sql.DB) ITaskRepository {
 	}
 }
 
-func (t *TaskRepository) Create(task *entity.Task) (*entity.Task, error) {
+func (t *TaskRepository) Create(task *entities.Task) (*entities.Task, error) {
 	query := `
 		INSERT INTO tasks (name, description, points, started_at, end_at, is_recurring, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		RETURNING id, name, description, points, started_at, end_at, is_recurring, created_at, updated_at
 	`
 
-	var createdTask entity.Task
+	var createdTask entities.Task
 	err := t.db.QueryRow(
 		query,
 		task.Name, task.Description, task.Points,
@@ -48,14 +48,14 @@ func (t *TaskRepository) Create(task *entity.Task) (*entity.Task, error) {
 	return &createdTask, nil
 }
 
-func (t *TaskRepository) FindById(id int64) (*entity.Task, error) {
+func (t *TaskRepository) FindById(id int64) (*entities.Task, error) {
 	query := `
 		SELECT id, name, description, points, started_at, end_at, is_recurring, created_at, updated_at
 		FROM tasks
 		WHERE id = $1
 	`
 
-	var task entity.Task
+	var task entities.Task
 	err := t.db.QueryRow(query, id).Scan(
 		&task.ID, &task.Name, &task.Description, &task.Points,
 		&task.StartedAt, &task.EndAt, &task.IsRecurring,
@@ -73,7 +73,7 @@ func (t *TaskRepository) FindById(id int64) (*entity.Task, error) {
 	return &task, nil
 }
 
-func (t *TaskRepository) Update(task *entity.Task) (*entity.Task, error) {
+func (t *TaskRepository) Update(task *entities.Task) (*entities.Task, error) {
 	query := `
 		UPDATE tasks
 		SET name = $1, description = $2, points = $3, started_at = $4, end_at = $5, 
@@ -82,7 +82,7 @@ func (t *TaskRepository) Update(task *entity.Task) (*entity.Task, error) {
 		RETURNING id, name, description, points, started_at, end_at, is_recurring, created_at, updated_at
 	`
 
-	var updatedTask entity.Task
+	var updatedTask entities.Task
 	err := t.db.QueryRow(
 		query,
 		task.Name, task.Description, task.Points,
