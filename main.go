@@ -8,6 +8,7 @@ import (
 	"trading-ace/controllers"
 	"trading-ace/helpers"
 	"trading-ace/logger"
+	"trading-ace/repositories"
 	"trading-ace/routes"
 
 	_ "github.com/lib/pq"
@@ -86,6 +87,8 @@ func main() {
 			controllers.NewHomeController,
 
 			// Repositories
+			repositories.NewTaskRepository,
+			repositories.NewTaskRecordRepository,
 
 			// Routes
 			routes.NewHomeRoutes,
