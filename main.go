@@ -65,10 +65,16 @@ func NewGinServer() *gin.Engine {
 
 func SetupServer(
 	r *gin.Engine,
+	logger logger.ILogger,
 	config *config.Config,
+	ethereumService services.IEthereumService,
 	homeRoutes routes.IHomeRoutes,
 	campaignRoutes routes.ICampaignRoutes,
 ) {
+	if err := ethereumService.SubscribeEthereumSwap(); err != nil {
+		logger.Error(err)
+	}
+
 	homeRoutes.RegisterHomeRoutes()
 	campaignRoutes.RegisterCampaignRoutes()
 
@@ -100,6 +106,7 @@ func main() {
 
 			// Services
 			services.NewCampaignService,
+			services.NewEthereumService,
 
 			// Helper
 			helpers.NewRedisHelper,
