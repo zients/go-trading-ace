@@ -1,7 +1,7 @@
 package controllers
 
 import (
-	"go-uniswap/config"
+	"trading-ace/config"
 
 	"github.com/gin-gonic/gin"
 )

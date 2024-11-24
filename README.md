@@ -27,7 +27,7 @@ Before getting started, ensure that you have the following software installed on
 
 1. Clone the Repository First, clone the repository to your local machine.
     ```
-    git clone https://github.com/tsen1220/go-uniswap.git
+    git clone https://github.com/tsen1220/go-trading-ace.git
     ```
 2. Build and Run with Docker Compose
     ```
@@ -53,12 +53,12 @@ Before getting started, ensure that you have the following software installed on
 2. **Run Migrations**
     Run the database migrations to set up the schema in the database:
     ```
-    migrate -path=migrations -database "postgres://username:password@localhost:5432/go-uniswap?sslmode=disable" up
+    migrate -path=migrations -database "postgres://username:password@localhost:5432/go-trading-ace?sslmode=disable" up
     ```
 3. **Rollback Migrations**
     If you need to rollback the migrations, you can use:
     ```
-    migrate -path=migrations -database "postgres://username:password@localhost:5432/go-uniswap?sslmode=disable" down
+    migrate -path=migrations -database "postgres://username:password@localhost:5432/go-trading-ace?sslmode=disable" down
     ```
 
 ### Running Tests

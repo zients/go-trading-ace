@@ -50,4 +50,4 @@ jobs:
       with:
         files: coverage.out
         token: ${{ secrets.CODECOV_TOKEN }}
-        slug: tsen1220/go-uniswap
+        slug: tsen1220/go-trading-ace

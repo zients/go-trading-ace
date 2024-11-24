@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"go-uniswap/controllers"
+	"trading-ace/controllers"
 
 	"github.com/gin-gonic/gin"
 )
