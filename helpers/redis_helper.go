@@ -13,8 +13,8 @@ type IRedisHelper interface {
 	Set(key string, value string, expiration time.Duration) error
 	Get(key string) (string, error)
 	Delete(key string) error
-	HSet(hash string, key string, value interface{}) error
-	HGet(hash string, key string) (string, error)
+	HSet(key string, field string, value interface{}) error
+	HGet(key string, field string) (string, error)
 	ZAdd(key string, members ...*redis.Z) error
 	ZRange(key string, start, stop int64) ([]string, error)
 	ZRangeWithScores(key string, start, stop int64) ([]string, []float64, error)
@@ -66,22 +66,25 @@ func (r *RedisHelper) Delete(key string) error {
 	return nil
 }
 
-func (r *RedisHelper) HSet(hash string, key string, value interface{}) error {
-	err := r.redisClient.HSet(context.Background(), r.prefix+hash, key, value).Err()
+func (r *RedisHelper) HSet(key string, field string, value interface{}) error {
+	err := r.redisClient.HSet(context.Background(), r.prefix+key, field, value).Err()
 	if err != nil {
-		return fmt.Errorf("failed to HSET field %s in hash %s: %w", key, hash, err)
+		return fmt.Errorf("failed to HSET field %s in key %s: %w", field, key, err)
 	}
+
 	return nil
 }
 
-func (r *RedisHelper) HGet(hash string, key string) (string, error) {
-	val, err := r.redisClient.HGet(context.Background(), r.prefix+hash, key).Result()
+func (r *RedisHelper) HGet(key string, field string) (string, error) {
+	val, err := r.redisClient.HGet(context.Background(), r.prefix+key, field).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return "", fmt.Errorf("field %s does not exist in hash %s", key, hash)
+			return "", fmt.Errorf("field %s does not exist in key %s", field, key)
 		}
-		return "", fmt.Errorf("failed to HGET field %s in hash %s: %w", key, hash, err)
+
+		return "", fmt.Errorf("failed to HGET field %s in key %s: %w", field, key, err)
 	}
+
 	return val, nil
 }
 
@@ -90,6 +93,7 @@ func (r *RedisHelper) ZAdd(key string, members ...*redis.Z) error {
 	if err != nil {
 		return fmt.Errorf("failed to ZADD to key %s: %w", key, err)
 	}
+
 	return nil
 }
 
@@ -98,6 +102,7 @@ func (r *RedisHelper) ZRange(key string, start, stop int64) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to ZRANGE key %s: %w", key, err)
 	}
+
 	return vals, nil
 }
 
@@ -123,6 +128,7 @@ func (r *RedisHelper) ZRevRange(key string, start, stop int64) ([]string, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ZRANGE key %s: %w", key, err)
 	}
+
 	return vals, nil
 }
 
