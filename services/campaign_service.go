@@ -18,11 +18,11 @@ type ICampaignService interface {
 }
 
 type CampaignService struct {
-	config         *config.Config
-	logger         logger.ILogger
-	taskRecordRepo repositories.ITaskHistoryRepository
-	taskRepo       repositories.ITaskRepository
-	redisHelper    helpers.IRedisHelper
+	config          *config.Config
+	logger          logger.ILogger
+	taskHistoryRepo repositories.ITaskHistoryRepository
+	taskRepo        repositories.ITaskRepository
+	redisHelper     helpers.IRedisHelper
 }
 
 const OnboardingTaskStr string = "OnboardingTask"
@@ -37,16 +37,16 @@ const SharePoolTaskPoints float64 = 10000
 func NewCampaignService(
 	config *config.Config,
 	logger logger.ILogger,
-	taskRecordRepo repositories.ITaskHistoryRepository,
+	taskHistoryRepo repositories.ITaskHistoryRepository,
 	taskRepo repositories.ITaskRepository,
 	redisHelper helpers.IRedisHelper,
 ) ICampaignService {
 	return &CampaignService{
-		config:         config,
-		logger:         logger,
-		taskRecordRepo: taskRecordRepo,
-		taskRepo:       taskRepo,
-		redisHelper:    redisHelper,
+		config:          config,
+		logger:          logger,
+		taskHistoryRepo: taskHistoryRepo,
+		taskRepo:        taskRepo,
+		redisHelper:     redisHelper,
 	}
 }
 
@@ -97,14 +97,14 @@ func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount
 	}
 
 	// find existed onboarding completed task record
-	_, err = s.taskRecordRepo.FindByAddressAndTaskId(senderAddress, onboardingTask.ID)
+	_, err = s.taskHistoryRepo.FindByAddressAndTaskId(senderAddress, onboardingTask.ID)
 	if err == nil {
 		return totalAmount, nil
 	}
 
 	// create onboarding task record
 	now := time.Now().UTC()
-	taskRecord := &entities.TaskRecord{
+	taskHistory := &entities.TaskHistory{
 		Address:      senderAddress,
 		TaskID:       onboardingTask.ID,
 		RewardPoints: OnboardingTaskPoints,
@@ -112,7 +112,7 @@ func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount
 		CompletedAt:  &now,
 	}
 
-	s.taskRecordRepo.Create(taskRecord)
+	s.taskHistoryRepo.Create(taskHistory)
 
 	return totalAmount, nil
 }
