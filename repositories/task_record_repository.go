@@ -9,6 +9,7 @@ import (
 type ITaskRecordRepository interface {
 	Create(taskRecord *entities.TaskRecord) (*entities.TaskRecord, error)
 	FindByID(id int64) (*entities.TaskRecord, error)
+	FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskRecord, error)
 	Update(record *entities.TaskRecord) (*entities.TaskRecord, error)
 	Delete(id int64) error
 }
@@ -57,6 +58,30 @@ func (r *TaskRecordRepository) FindByID(id int64) (*entities.TaskRecord, error) 
 
 	var result entities.TaskRecord
 	err := r.db.QueryRow(query, id).Scan(
+		&result.ID, &result.Address, &result.TaskID, &result.RewardPoints,
+		&result.Amount, &result.CompletedAt, &result.CreatedAt, &result.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("task record not found: %w", err)
+		}
+
+		return nil, fmt.Errorf("failed to find task record: %w", err)
+	}
+
+	return &result, nil
+}
+
+func (r *TaskRecordRepository) FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskRecord, error) {
+	query := `
+		SELECT id, address, task_id, reward_points, amount, completed_at, created_at, updated_at
+		FROM task_records
+		WHERE address = $1 AND task_id = $2
+	`
+
+	var result entities.TaskRecord
+	err := r.db.QueryRow(query, address, taskId).Scan(
 		&result.ID, &result.Address, &result.TaskID, &result.RewardPoints,
 		&result.Amount, &result.CompletedAt, &result.CreatedAt, &result.UpdatedAt,
 	)

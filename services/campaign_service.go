@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 	"trading-ace/config"
 	"trading-ace/entities"
@@ -25,11 +26,12 @@ type CampaignService struct {
 
 const OnboardingTaskStr string = "OnboardingTask"
 const OnboardingTaskDescription string = "OnboardingTask"
-const OnboardingTaskPoints int64 = 100
+const OnboardingTaskPoints float64 = 100
+const OnboardingTaskTargetAmount float64 = 1000
 
 const SharePoolTaskStr string = "SharePoolTask"
 const SharePoolTaskDescription string = "SharePoolTask"
-const SharePoolTaskPoints int64 = 10000
+const SharePoolTaskPoints float64 = 10000
 
 func NewCampaignService(
 	config *config.Config,
@@ -59,6 +61,56 @@ func (s *CampaignService) StartCampaign() error {
 	}
 
 	return nil
+}
+
+func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount float64) (float64, error) {
+	// find current share task
+	task, err := s.findCurrentSharePoolTask()
+	if err != nil {
+		return 0, err
+	}
+
+	key := fmt.Sprintf("%s_%d", task.Name, task.Period)
+	s.redisHelper.HIncrFloat(key, senderAddress, amount)
+	totalAmountStr, err := s.redisHelper.HGet(key, senderAddress)
+	if err != nil {
+		return 0, err
+	}
+
+	totalAmount, err := strconv.ParseFloat(totalAmountStr, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	// if amount is not enough
+	if totalAmount < OnboardingTaskTargetAmount {
+		return totalAmount, nil
+	}
+
+	onboardingTask, err := s.findOnboardingTask()
+	if err != nil {
+		return 0, err
+	}
+
+	// find existed onboarding completed task record
+	_, err = s.taskRecordRepo.FindByAddressAndTaskId(senderAddress, onboardingTask.ID)
+	if err == nil {
+		return totalAmount, nil
+	}
+
+	// create onboarding task record
+	now := time.Now().UTC()
+	taskRecord := &entities.TaskRecord{
+		Address:      senderAddress,
+		TaskID:       onboardingTask.ID,
+		RewardPoints: OnboardingTaskPoints,
+		Amount:       totalAmount,
+		CompletedAt:  &now,
+	}
+
+	s.taskRecordRepo.Create(taskRecord)
+
+	return totalAmount, nil
 }
 
 func (s *CampaignService) createOnboardingTask() error {
@@ -124,8 +176,8 @@ func (s *CampaignService) createSharePoolTask() error {
 	return nil
 }
 
-func (s *CampaignService) getCurrentSharePoolTask() (*entities.Task, error) {
-	key := s.config.Redis.Prefix + "curr_shared_pool_task"
+func (s *CampaignService) findCurrentSharePoolTask() (*entities.Task, error) {
+	key := "curr_shared_pool_task"
 	redisData, err := s.redisHelper.Get(key)
 	if err == nil {
 		task := &entities.Task{}
@@ -150,4 +202,25 @@ func (s *CampaignService) getCurrentSharePoolTask() (*entities.Task, error) {
 	}
 
 	return nil, fmt.Errorf("no active share pool task found")
+}
+
+func (s *CampaignService) findOnboardingTask() (*entities.Task, error) {
+	key := "onboarding_task"
+	redisData, err := s.redisHelper.Get(key)
+	if err == nil {
+		task := &entities.Task{}
+		json.Unmarshal([]byte(redisData), &task)
+
+		return task, nil
+	}
+
+	task, err := s.taskRepo.FindByName(OnboardingTaskStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch onboarding task: %w", err)
+	}
+
+	encodedTask, _ := json.Marshal(task)
+	s.redisHelper.Set(key, string(encodedTask), time.Until(*task.EndAt))
+
+	return task, nil
 }

@@ -9,6 +9,7 @@ import (
 type ITaskRepository interface {
 	Create(task *entities.Task) (*entities.Task, error)
 	FindById(id int64) (*entities.Task, error)
+	FindByName(name string) (*entities.Task, error)
 	GetByName(name string) ([]*entities.Task, error)
 	IsExistedByName(name string) (bool, error)
 	Update(task *entities.Task) (*entities.Task, error)
@@ -59,6 +60,31 @@ func (t *TaskRepository) FindById(id int64) (*entities.Task, error) {
 
 	var task entities.Task
 	err := t.db.QueryRow(query, id).Scan(
+		&task.ID, &task.Name, &task.Description, &task.Points,
+		&task.StartedAt, &task.EndAt, &task.Period,
+		&task.CreatedAt, &task.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("task not found: %w", err)
+		}
+
+		return nil, fmt.Errorf("failed to get task: %w", err)
+	}
+
+	return &task, nil
+}
+
+func (t *TaskRepository) FindByName(name string) (*entities.Task, error) {
+	query := `
+		SELECT id, name, description, points, started_at, end_at, period, created_at, updated_at
+		FROM tasks
+		WHERE name = $1
+	`
+
+	var task entities.Task
+	err := t.db.QueryRow(query, name).Scan(
 		&task.ID, &task.Name, &task.Description, &task.Points,
 		&task.StartedAt, &task.EndAt, &task.Period,
 		&task.CreatedAt, &task.UpdatedAt,
