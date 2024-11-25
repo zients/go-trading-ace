@@ -9,11 +9,13 @@ import (
 	"trading-ace/entities"
 	"trading-ace/helpers"
 	"trading-ace/logger"
+	"trading-ace/models"
 	"trading-ace/repositories"
 )
 
 type ICampaignService interface {
 	StartCampaign() error
+	GetPointHistories(address string) ([]*models.GetByAddressIncludingTask, error)
 	RecordUSDCSwapTotalAmount(senderAddress string, amount float64) (float64, error)
 }
 
@@ -62,6 +64,10 @@ func (s *CampaignService) StartCampaign() error {
 	}
 
 	return nil
+}
+
+func (s *CampaignService) GetPointHistories(address string) ([]*models.GetByAddressIncludingTask, error) {
+	return s.taskHistoryRepo.GetByAddressIncludingTask(address)
 }
 
 func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount float64) (float64, error) {

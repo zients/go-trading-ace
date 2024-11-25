@@ -4,12 +4,14 @@ import (
 	"database/sql"
 	"fmt"
 	"trading-ace/entities"
+	"trading-ace/models"
 )
 
 type ITaskHistoryRepository interface {
 	Create(taskHistory *entities.TaskHistory) (*entities.TaskHistory, error)
 	FindByID(id int64) (*entities.TaskHistory, error)
 	FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskHistory, error)
+	GetByAddressIncludingTask(address string) ([]*models.GetByAddressIncludingTask, error)
 	Update(record *entities.TaskHistory) (*entities.TaskHistory, error)
 	Delete(id int64) error
 }
@@ -95,6 +97,49 @@ func (r *TaskHistoryRepository) FindByAddressAndTaskId(address string, taskId in
 	}
 
 	return &result, nil
+}
+
+func (t *TaskHistoryRepository) GetByAddressIncludingTask(address string) ([]*models.GetByAddressIncludingTask, error) {
+	query := `
+		SELECT th.id, th.address, th.reward_points, th.amount, th.completed_at,
+		       t.id, t.name, t.description, t.points, t.started_at, t.end_at, t.period, t.created_at, t.updated_at
+		FROM task_histories th
+		INNER JOIN tasks t ON th.task_id = t.id
+		WHERE th.address = $1
+	`
+
+	rows, err := t.db.Query(query, address)
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+
+	defer rows.Close()
+
+	var results []*models.GetByAddressIncludingTask
+	for rows.Next() {
+		task := &entities.Task{}
+		taskHistory := &entities.TaskHistory{}
+
+		// Scan columns
+		err := rows.Scan(
+			&taskHistory.ID, &taskHistory.Address, &taskHistory.RewardPoints, &taskHistory.Amount, &taskHistory.CompletedAt,
+
+			&task.ID, &task.Name, &task.Description, &task.Points,
+			&task.StartedAt, &task.EndAt, &task.Period,
+			&task.CreatedAt, &task.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("scan failed: %w", err)
+		}
+
+		results = append(results, &models.GetByAddressIncludingTask{
+			Task:        task,
+			TaskHistory: taskHistory,
+		})
+	}
+
+	return results, nil
 }
 
 func (r *TaskHistoryRepository) Update(record *entities.TaskHistory) (*entities.TaskHistory, error) {
