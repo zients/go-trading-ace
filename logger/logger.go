@@ -15,7 +15,6 @@ type LogrusLogger struct {
 	logger *logrus.Logger
 }
 
-// NewLogrusLogger creates a new LogrusLogger instance
 func NewLogrusLogger() ILogger {
 	log := logrus.New()
 	log.SetFormatter(&logrus.JSONFormatter{})
