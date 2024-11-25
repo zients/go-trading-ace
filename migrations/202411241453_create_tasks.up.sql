@@ -11,8 +11,8 @@ CREATE TABLE tasks (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- user's task completed records
-CREATE TABLE task_records (
+-- user's task completed histories
+CREATE TABLE task_histories (
     id SERIAL PRIMARY KEY,
     address VARCHAR(255) NOT NULL,
     task_id INT NOT NULL REFERENCES tasks(id),
@@ -20,5 +20,6 @@ CREATE TABLE task_records (
     amount DECIMAL NOT NULL,
     completed_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT task_histories_address_task_id_unique UNIQUE (address, task_id)
 );

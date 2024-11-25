@@ -20,7 +20,7 @@ type ICampaignService interface {
 type CampaignService struct {
 	config         *config.Config
 	logger         logger.ILogger
-	taskRecordRepo repositories.ITaskRecordRepository
+	taskRecordRepo repositories.ITaskHistoryRepository
 	taskRepo       repositories.ITaskRepository
 	redisHelper    helpers.IRedisHelper
 }
@@ -37,7 +37,7 @@ const SharePoolTaskPoints float64 = 10000
 func NewCampaignService(
 	config *config.Config,
 	logger logger.ILogger,
-	taskRecordRepo repositories.ITaskRecordRepository,
+	taskRecordRepo repositories.ITaskHistoryRepository,
 	taskRepo repositories.ITaskRepository,
 	redisHelper helpers.IRedisHelper,
 ) ICampaignService {

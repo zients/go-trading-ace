@@ -6,7 +6,7 @@ import (
 	"trading-ace/entities"
 )
 
-type ITaskRecordRepository interface {
+type ITaskHistoryRepository interface {
 	Create(taskRecord *entities.TaskRecord) (*entities.TaskRecord, error)
 	FindByID(id int64) (*entities.TaskRecord, error)
 	FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskRecord, error)
@@ -14,19 +14,19 @@ type ITaskRecordRepository interface {
 	Delete(id int64) error
 }
 
-type TaskRecordRepository struct {
+type TaskHistoryRepository struct {
 	db *sql.DB
 }
 
-func NewTaskRecordRepository(db *sql.DB) ITaskRecordRepository {
-	return &TaskRecordRepository{
+func NewTaskHistoryRepository(db *sql.DB) ITaskHistoryRepository {
+	return &TaskHistoryRepository{
 		db: db,
 	}
 }
 
-func (r *TaskRecordRepository) Create(taskRecord *entities.TaskRecord) (*entities.TaskRecord, error) {
+func (r *TaskHistoryRepository) Create(taskRecord *entities.TaskRecord) (*entities.TaskRecord, error) {
 	query := `
-		INSERT INTO task_records (address, task_id, reward_points, amount, completed_at, created_at, updated_at)
+		INSERT INTO task_histories (address, task_id, reward_points, amount, completed_at, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		RETURNING id, address, task_id, reward_points, amount, completed_at, created_at, updated_at
 	`
@@ -49,10 +49,10 @@ func (r *TaskRecordRepository) Create(taskRecord *entities.TaskRecord) (*entitie
 	return &result, nil
 }
 
-func (r *TaskRecordRepository) FindByID(id int64) (*entities.TaskRecord, error) {
+func (r *TaskHistoryRepository) FindByID(id int64) (*entities.TaskRecord, error) {
 	query := `
 		SELECT id, address, task_id, reward_points, amount, completed_at, created_at, updated_at
-		FROM task_records
+		FROM task_histories
 		WHERE id = $1
 	`
 
@@ -73,10 +73,10 @@ func (r *TaskRecordRepository) FindByID(id int64) (*entities.TaskRecord, error) 
 	return &result, nil
 }
 
-func (r *TaskRecordRepository) FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskRecord, error) {
+func (r *TaskHistoryRepository) FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskRecord, error) {
 	query := `
 		SELECT id, address, task_id, reward_points, amount, completed_at, created_at, updated_at
-		FROM task_records
+		FROM task_histories
 		WHERE address = $1 AND task_id = $2
 	`
 
@@ -97,9 +97,9 @@ func (r *TaskRecordRepository) FindByAddressAndTaskId(address string, taskId int
 	return &result, nil
 }
 
-func (r *TaskRecordRepository) Update(record *entities.TaskRecord) (*entities.TaskRecord, error) {
+func (r *TaskHistoryRepository) Update(record *entities.TaskRecord) (*entities.TaskRecord, error) {
 	query := `
-		UPDATE task_records
+		UPDATE task_histories
 		SET address = $1, task_id = $2, reward_points = $3, amount = $4, completed_at = $5, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $6
 		RETURNING id, address, task_id, reward_points, amount, completed_at, created_at, updated_at
@@ -123,9 +123,9 @@ func (r *TaskRecordRepository) Update(record *entities.TaskRecord) (*entities.Ta
 	return &result, nil
 }
 
-func (r *TaskRecordRepository) Delete(id int64) error {
+func (r *TaskHistoryRepository) Delete(id int64) error {
 	query := `
-		DELETE FROM task_records
+		DELETE FROM task_histories
 		WHERE id = $1
 	`
 
