@@ -105,7 +105,6 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 	eventSignature := "Swap(address,uint256,uint256,uint256,uint256,address)"
 	eventSignatureHash := crypto.Keccak256Hash([]byte(eventSignature))
 
-	// 計算事件簽名的哈希
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics:    [][]common.Hash{{eventSignatureHash}},

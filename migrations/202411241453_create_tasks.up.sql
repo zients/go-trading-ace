@@ -1,4 +1,4 @@
--- 任務表
+-- tasks
 CREATE TABLE tasks (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL, 
@@ -11,7 +11,7 @@ CREATE TABLE tasks (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 用戶完成任務記錄表
+-- user's task completed records
 CREATE TABLE task_records (
     id SERIAL PRIMARY KEY,
     address VARCHAR(255) NOT NULL,
