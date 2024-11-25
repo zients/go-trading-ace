@@ -78,6 +78,9 @@ func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount
 		return 0, err
 	}
 
+	totalKey := fmt.Sprintf("%s_total", key)
+	s.redisHelper.IncrFloat(totalKey, amount)
+
 	totalAmount, err := strconv.ParseFloat(totalAmountStr, 64)
 	if err != nil {
 		return 0, err

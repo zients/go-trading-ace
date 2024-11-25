@@ -119,6 +119,8 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 	defer sub.Unsubscribe()
 
 	for vLog := range logsCh {
+		//Amount0 :usdc
+		//Amount1 :weth
 		event := struct {
 			Amount0In  *big.Int
 			Amount1In  *big.Int
