@@ -13,6 +13,7 @@ type IRedisHelper interface {
 	Set(key string, value string, expiration time.Duration) error
 	Get(key string) (string, error)
 	Delete(key string) error
+	IncrFloat(key string, value float64) error
 	HSet(key string, field string, value interface{}) error
 	HGet(key string, field string) (string, error)
 	HIncrFloat(key string, field string, value float64) error
@@ -62,6 +63,15 @@ func (r *RedisHelper) Delete(key string) error {
 	err := r.redisClient.Del(context.Background(), r.prefix+key).Err()
 	if err != nil {
 		return fmt.Errorf("failed to delete key %s: %w", key, err)
+	}
+
+	return nil
+}
+
+func (r *RedisHelper) IncrFloat(key string, value float64) error {
+	err := r.redisClient.IncrByFloat(context.Background(), r.prefix+key, value).Err()
+	if err != nil {
+		return fmt.Errorf("failed to IncrFloat key %s: %w", key, err)
 	}
 
 	return nil

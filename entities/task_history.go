@@ -2,7 +2,7 @@ package entities
 
 import "time"
 
-type TaskRecord struct {
+type TaskHistory struct {
 	ID           int64      `db:"id"`            // SERIAL PRIMARY KEY
 	Address      string     `db:"address"`       // VARCHAR(255) NOT NULL
 	TaskID       int64      `db:"task_id"`       // INT NOT NULL REFERENCES tasks(id)

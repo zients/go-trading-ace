@@ -96,7 +96,7 @@ func main() {
 
 			// Repositories
 			repositories.NewTaskRepository,
-			repositories.NewTaskRecordRepository,
+			repositories.NewTaskHistoryRepository,
 
 			// Routes
 			routes.NewHomeRoutes,
