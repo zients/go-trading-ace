@@ -148,69 +148,63 @@ func TestGetByName(t *testing.T) {
 }
 
 func TestIsExistedByName(t *testing.T) {
-	// 測試場景
-	tests := []struct {
-		name        string
-		mockSetup   func(mock sqlmock.Sqlmock)
-		input       string
-		expected    bool
-		expectError bool
-	}{
-		{
-			name: "Task exists",
-			mockSetup: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery(`SELECT EXISTS`).
-					WithArgs("test-task").
-					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
-			},
-			input:       "test-task",
-			expected:    true,
-			expectError: false,
-		},
-		{
-			name: "Task does not exist",
-			mockSetup: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery(`SELECT EXISTS`).
-					WithArgs("non-existent-task").
-					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
-			},
-			input:       "non-existent-task",
-			expected:    false,
-			expectError: false,
-		},
-		{
-			name: "Database error",
-			mockSetup: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery(`SELECT EXISTS`).
-					WithArgs("error-task").
-					WillReturnError(errors.New("db error"))
-			},
-			input:       "error-task",
-			expected:    false,
-			expectError: true,
-		},
-	}
+	// 測試場景：Task exists
+	t.Run("Task exists", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		assert.NoError(t, err)
+		defer db.Close()
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			db, mock, err := sqlmock.New()
-			assert.NoError(t, err)
-			defer db.Close()
+		mock.ExpectQuery(`SELECT EXISTS`).
+			WithArgs("test-task").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 
-			tc.mockSetup(mock)
+		repo := &TaskRepository{db: db}
 
-			repo := &TaskRepository{db: db}
+		result, err := repo.IsExistedByName("test-task")
 
-			result, err := repo.IsExistedByName(tc.input)
+		assert.NoError(t, err)
+		assert.Equal(t, true, result)
 
-			if tc.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-			assert.Equal(t, tc.expected, result)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
 
-			assert.NoError(t, mock.ExpectationsWereMet())
-		})
-	}
+	// 測試場景：Task does not exist
+	t.Run("Task does not exist", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		assert.NoError(t, err)
+		defer db.Close()
+
+		mock.ExpectQuery(`SELECT EXISTS`).
+			WithArgs("non-existent-task").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+		repo := &TaskRepository{db: db}
+
+		result, err := repo.IsExistedByName("non-existent-task")
+
+		assert.NoError(t, err)
+		assert.Equal(t, false, result)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	// 測試場景：Database error
+	t.Run("Database error", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		assert.NoError(t, err)
+		defer db.Close()
+
+		mock.ExpectQuery(`SELECT EXISTS`).
+			WithArgs("error-task").
+			WillReturnError(errors.New("db error"))
+
+		repo := &TaskRepository{db: db}
+
+		result, err := repo.IsExistedByName("error-task")
+
+		assert.Error(t, err)
+		assert.Equal(t, false, result)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
 }
