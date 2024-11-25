@@ -71,9 +71,7 @@ func SetupServer(
 	homeRoutes routes.IHomeRoutes,
 	campaignRoutes routes.ICampaignRoutes,
 ) {
-	if err := ethereumService.SubscribeEthereumSwap(); err != nil {
-		logger.Error(err)
-	}
+	go ethereumService.SubscribeEthereumSwap()
 
 	homeRoutes.RegisterHomeRoutes()
 	campaignRoutes.RegisterCampaignRoutes()

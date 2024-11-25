@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"sync"
 	"trading-ace/config"
 	"trading-ace/logger"
 
@@ -21,17 +22,19 @@ type IEthereumService interface {
 }
 
 type EthereumService struct {
-	logger logger.ILogger
-	config *config.Config
+	campaignService ICampaignService
+	logger          logger.ILogger
+	config          *config.Config
 }
 
 const wethDecimals int64 = 18
 const usdcDecimals int64 = 6
 
-func NewEthereumService(logger logger.ILogger, config *config.Config) IEthereumService {
+func NewEthereumService(logger logger.ILogger, config *config.Config, campaignService ICampaignService) IEthereumService {
 	return &EthereumService{
-		logger: logger,
-		config: config,
+		campaignService: campaignService,
+		logger:          logger,
+		config:          config,
 	}
 }
 
@@ -118,12 +121,10 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 
 	for vLog := range logsCh {
 		event := struct {
-			Sender     common.Address
 			Amount0In  *big.Int
 			Amount1In  *big.Int
 			Amount0Out *big.Int
 			Amount1Out *big.Int
-			To         common.Address
 		}{}
 
 		err := parsedABI.UnpackIntoInterface(&event, "Swap", vLog.Data)
@@ -132,8 +133,8 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 			continue
 		}
 
-		e.logger.Info("Sender: %s", vLog.Topics[1].Hex()[26:])
-		e.logger.Info("To: %s", vLog.Topics[2].Hex()[26:])
+		senderAddress := vLog.Topics[1].Hex()[26:]
+		e.logger.Info("Sender: %s", senderAddress)
 
 		amountInUSDC := new(big.Float).SetInt(event.Amount0In)
 		amountInUSDC.Quo(amountInUSDC, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(usdcDecimals), nil)))
@@ -150,6 +151,27 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 		amountOutWETH := new(big.Float).SetInt(event.Amount1Out)
 		amountOutWETH.Quo(amountOutWETH, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(wethDecimals), nil)))
 		e.logger.Info("Amount1Out (WETH): %s", amountOutWETH.String())
+
+		amountInUSDCFloat64, _ := amountInUSDC.Float64()
+		amountOutUSDCFloat64, _ := amountOutUSDC.Float64()
+
+		// Campaign Record
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		// in usdc swap
+		go func() {
+			defer wg.Done()
+			e.campaignService.RecordUSDCSwapTotalAmount(senderAddress, amountInUSDCFloat64)
+		}()
+
+		//out usdc swap
+		go func() {
+			defer wg.Done()
+			e.campaignService.RecordUSDCSwapTotalAmount(senderAddress, amountOutUSDCFloat64)
+		}()
+
+		wg.Wait()
 	}
 
 	return nil

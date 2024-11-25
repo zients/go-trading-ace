@@ -14,6 +14,7 @@ import (
 
 type ICampaignService interface {
 	StartCampaign() error
+	RecordUSDCSwapTotalAmount(senderAddress string, amount float64) (float64, error)
 }
 
 type CampaignService struct {
