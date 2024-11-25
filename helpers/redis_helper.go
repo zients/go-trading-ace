@@ -15,6 +15,7 @@ type IRedisHelper interface {
 	Delete(key string) error
 	HSet(key string, field string, value interface{}) error
 	HGet(key string, field string) (string, error)
+	HIncrFloat(key string, field string, value float64) error
 	ZAdd(key string, members ...*redis.Z) error
 	ZRange(key string, start, stop int64) ([]string, error)
 	ZRangeWithScores(key string, start, stop int64) ([]string, []float64, error)
@@ -86,6 +87,15 @@ func (r *RedisHelper) HGet(key string, field string) (string, error) {
 	}
 
 	return val, nil
+}
+
+func (r *RedisHelper) HIncrFloat(key string, field string, value float64) error {
+	err := r.redisClient.HIncrByFloat(context.Background(), r.prefix+key, field, value).Err()
+	if err != nil {
+		return fmt.Errorf("failed to HIncrFloat field %s in key %s: %w", field, key, err)
+	}
+
+	return nil
 }
 
 func (r *RedisHelper) ZAdd(key string, members ...*redis.Z) error {

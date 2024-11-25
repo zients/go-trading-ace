@@ -1,9 +1,13 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
+	"trading-ace/config"
 	"trading-ace/entities"
+	"trading-ace/helpers"
+	"trading-ace/logger"
 	"trading-ace/repositories"
 )
 
@@ -12,8 +16,11 @@ type ICampaignService interface {
 }
 
 type CampaignService struct {
+	config         *config.Config
+	logger         logger.ILogger
 	taskRecordRepo repositories.ITaskRecordRepository
 	taskRepo       repositories.ITaskRepository
+	redisHelper    helpers.IRedisHelper
 }
 
 const OnboardingTaskStr string = "OnboardingTask"
@@ -24,10 +31,19 @@ const SharePoolTaskStr string = "SharePoolTask"
 const SharePoolTaskDescription string = "SharePoolTask"
 const SharePoolTaskPoints int64 = 10000
 
-func NewCampaignService(taskRecordRepo repositories.ITaskRecordRepository, taskRepo repositories.ITaskRepository) ICampaignService {
+func NewCampaignService(
+	config *config.Config,
+	logger logger.ILogger,
+	taskRecordRepo repositories.ITaskRecordRepository,
+	taskRepo repositories.ITaskRepository,
+	redisHelper helpers.IRedisHelper,
+) ICampaignService {
 	return &CampaignService{
+		config:         config,
+		logger:         logger,
 		taskRecordRepo: taskRecordRepo,
 		taskRepo:       taskRepo,
+		redisHelper:    redisHelper,
 	}
 }
 
@@ -106,4 +122,32 @@ func (s *CampaignService) createSharePoolTask() error {
 	}
 
 	return nil
+}
+
+func (s *CampaignService) getCurrentSharePoolTask() (*entities.Task, error) {
+	key := s.config.Redis.Prefix + "curr_shared_pool_task"
+	redisData, err := s.redisHelper.Get(key)
+	if err == nil {
+		task := &entities.Task{}
+		json.Unmarshal([]byte(redisData), &task)
+
+		return task, nil
+	}
+
+	tasks, err := s.taskRepo.GetByName(SharePoolTaskStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch share pool tasks: %w", err)
+	}
+
+	now := time.Now().UTC()
+	for _, task := range tasks {
+		if task.StartedAt != nil && task.EndAt != nil && now.After(*task.StartedAt) && now.Before(*task.EndAt) {
+			encodedTask, _ := json.Marshal(task)
+			s.redisHelper.Set(key, string(encodedTask), time.Until(*task.EndAt))
+
+			return task, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no active share pool task found")
 }

@@ -9,6 +9,7 @@ import (
 type ITaskRepository interface {
 	Create(task *entities.Task) (*entities.Task, error)
 	FindById(id int64) (*entities.Task, error)
+	GetByName(name string) ([]*entities.Task, error)
 	IsExistedByName(name string) (bool, error)
 	Update(task *entities.Task) (*entities.Task, error)
 	Delete(id int64) error
@@ -72,6 +73,39 @@ func (t *TaskRepository) FindById(id int64) (*entities.Task, error) {
 	}
 
 	return &task, nil
+}
+
+func (t *TaskRepository) GetByName(name string) ([]*entities.Task, error) {
+	query := `
+		SELECT id, name, description, points, started_at, end_at, period, created_at, updated_at
+		FROM tasks
+		WHERE name = $1
+	`
+
+	rows, err := t.db.Query(query, name)
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+
+	defer rows.Close()
+
+	var tasks []*entities.Task
+	for rows.Next() {
+		task := &entities.Task{}
+		err := rows.Scan(
+			&task.ID, &task.Name, &task.Description, &task.Points,
+			&task.StartedAt, &task.EndAt, &task.Period,
+			&task.CreatedAt, &task.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("scan failed: %w", err)
+		}
+
+		tasks = append(tasks, task)
+	}
+
+	return tasks, nil
 }
 
 func (t *TaskRepository) IsExistedByName(name string) (bool, error) {
