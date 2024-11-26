@@ -17,6 +17,10 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
+type IEthereumClient interface {
+	SubscribeFilterLogs(context.Context, ethereum.FilterQuery, chan<- types.Log) (ethereum.Subscription, error)
+}
+
 type IEthereumService interface {
 	SubscribeEthereumSwap() error
 }
@@ -39,69 +43,103 @@ func NewEthereumService(logger logger.ILogger, config *config.Config, campaignSe
 }
 
 func (e *EthereumService) SubscribeEthereumSwap() error {
-	url := fmt.Sprintf("wss://mainnet.infura.io/ws/v3/%s", e.config.Infura.Key)
-	contractAddressHex := "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
-
-	client, err := ethclient.Dial(url)
+	client, err := e.connectToClient()
 	if err != nil {
-		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
+		return err
 	}
 
-	swapEventAbi := `
-		[
-			{
-				"anonymous": false,
-				"inputs": [
-				{
-					"indexed": true,
-					"internalType": "address",
-					"name": "sender",
-					"type": "address"
-				},
-				{
-					"indexed": false,
-					"internalType": "uint256",
-					"name": "amount0In",
-					"type": "uint256"
-				},
-				{
-					"indexed": false,
-					"internalType": "uint256",
-					"name": "amount1In",
-					"type": "uint256"
-				},
-				{
-					"indexed": false,
-					"internalType": "uint256",
-					"name": "amount0Out",
-					"type": "uint256"
-				},
-				{
-					"indexed": false,
-					"internalType": "uint256",
-					"name": "amount1Out",
-					"type": "uint256"
-				},
-				{
-					"indexed": true,
-					"internalType": "address",
-					"name": "to",
-					"type": "address"
-				}
-				],
-				"name": "Swap",
-				"type": "event"
-			}
-		]
-	`
+	parsedABI, err := e.parseABI()
+	if err != nil {
+		return err
+	}
 
-	contractAddress := common.HexToAddress(contractAddressHex)
+	logsCh, sub, err := e.subscribeToSwapEvent(client)
+	if err != nil {
+		return err
+	}
+
+	defer sub.Unsubscribe()
+
+	for vLog := range logsCh {
+		err = e.processSwapEvent(vLog, parsedABI)
+		if err != nil {
+			e.logger.Error(err)
+		}
+	}
+
+	return nil
+}
+
+func (e *EthereumService) connectToClient() (IEthereumClient, error) {
+	url := fmt.Sprintf("wss://mainnet.infura.io/ws/v3/%s", e.config.Infura.Key)
+	client, err := ethclient.Dial(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to Ethereum client: %v", err)
+	}
+
+	return client, nil
+}
+
+func (e *EthereumService) parseABI() (abi.ABI, error) {
+	swapEventAbi := `
+	[
+		{
+			"anonymous": false,
+			"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "sender",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount0In",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount1In",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount0Out",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount1Out",
+				"type": "uint256"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "to",
+				"type": "address"
+			}
+			],
+			"name": "Swap",
+			"type": "event"
+		}
+	]
+`
 
 	parsedABI, err := abi.JSON(strings.NewReader(swapEventAbi))
 	if err != nil {
-		return fmt.Errorf("failed to parse ABI: %v", err)
+		return abi.ABI{}, fmt.Errorf("failed to parse ABI: %v", err)
 	}
 
+	return parsedABI, nil
+}
+
+func (e *EthereumService) subscribeToSwapEvent(client IEthereumClient) (<-chan types.Log, ethereum.Subscription, error) {
+	contractAddressHex := "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
+	contractAddress := common.HexToAddress(contractAddressHex)
 	eventSignature := "Swap(address,uint256,uint256,uint256,uint256,address)"
 	eventSignatureHash := crypto.Keccak256Hash([]byte(eventSignature))
 
@@ -113,67 +151,63 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 	logsCh := make(chan types.Log)
 	sub, err := client.SubscribeFilterLogs(context.Background(), query, logsCh)
 	if err != nil {
-		return fmt.Errorf("failed to subscribe: %v", err)
+		return nil, nil, fmt.Errorf("failed to subscribe: %v", err)
 	}
 
-	defer sub.Unsubscribe()
+	return logsCh, sub, nil
+}
 
-	for vLog := range logsCh {
-		//Amount0 :usdc
-		//Amount1 :weth
-		event := struct {
-			Amount0In  *big.Int
-			Amount1In  *big.Int
-			Amount0Out *big.Int
-			Amount1Out *big.Int
-		}{}
+func (e *EthereumService) processSwapEvent(vLog types.Log, parsedABI abi.ABI) error {
+	event := struct {
+		Amount0In  *big.Int
+		Amount1In  *big.Int
+		Amount0Out *big.Int
+		Amount1Out *big.Int
+	}{}
 
-		err := parsedABI.UnpackIntoInterface(&event, "Swap", vLog.Data)
-		if err != nil {
-			e.logger.Error("Failed to unpack log: %v", err)
-			continue
-		}
-
-		senderAddress := vLog.Topics[1].Hex()[26:]
-		e.logger.Info("Sender: %s", senderAddress)
-
-		amountInUSDC := new(big.Float).SetInt(event.Amount0In)
-		amountInUSDC.Quo(amountInUSDC, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(usdcDecimals), nil)))
-		e.logger.Info("Amount0In (USDC): %s", amountInUSDC.String())
-
-		amountOutUSDC := new(big.Float).SetInt(event.Amount0Out)
-		amountOutUSDC.Quo(amountOutUSDC, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(usdcDecimals), nil)))
-		e.logger.Info("Amount0Out (USDC): %s", amountOutUSDC.String())
-
-		amountInWETH := new(big.Float).SetInt(event.Amount1In)
-		amountInWETH.Quo(amountInWETH, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(wethDecimals), nil)))
-		e.logger.Info("Amount1In (WETH): %s", amountInWETH.String())
-
-		amountOutWETH := new(big.Float).SetInt(event.Amount1Out)
-		amountOutWETH.Quo(amountOutWETH, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(wethDecimals), nil)))
-		e.logger.Info("Amount1Out (WETH): %s", amountOutWETH.String())
-
-		amountInUSDCFloat64, _ := amountInUSDC.Float64()
-		amountOutUSDCFloat64, _ := amountOutUSDC.Float64()
-
-		// Campaign Record
-		var wg sync.WaitGroup
-		wg.Add(2)
-
-		// in usdc swap
-		go func() {
-			defer wg.Done()
-			e.campaignService.RecordUSDCSwapTotalAmount(senderAddress, amountInUSDCFloat64)
-		}()
-
-		//out usdc swap
-		go func() {
-			defer wg.Done()
-			e.campaignService.RecordUSDCSwapTotalAmount(senderAddress, amountOutUSDCFloat64)
-		}()
-
-		wg.Wait()
+	err := parsedABI.UnpackIntoInterface(&event, "Swap", vLog.Data)
+	if err != nil {
+		return fmt.Errorf("failed to unpack log: %v", err)
 	}
+
+	senderAddress := vLog.Topics[1].Hex()[26:]
+	e.logger.Info("Sender: %s", senderAddress)
+
+	// Convert amounts to float for easier logging
+	amountInUSDC := new(big.Float).SetInt(event.Amount0In)
+	amountInUSDC.Quo(amountInUSDC, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(usdcDecimals), nil)))
+	e.logger.Info("Amount0In (USDC): %s", amountInUSDC.String())
+
+	amountOutUSDC := new(big.Float).SetInt(event.Amount0Out)
+	amountOutUSDC.Quo(amountOutUSDC, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(usdcDecimals), nil)))
+	e.logger.Info("Amount0Out (USDC): %s", amountOutUSDC.String())
+
+	amountInWETH := new(big.Float).SetInt(event.Amount1In)
+	amountInWETH.Quo(amountInWETH, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(wethDecimals), nil)))
+	e.logger.Info("Amount1In (WETH): %s", amountInWETH.String())
+
+	amountOutWETH := new(big.Float).SetInt(event.Amount1Out)
+	amountOutWETH.Quo(amountOutWETH, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(wethDecimals), nil)))
+	e.logger.Info("Amount1Out (WETH): %s", amountOutWETH.String())
+
+	// Record the campaign data asynchronously
+	amountInUSDCFloat64, _ := amountInUSDC.Float64()
+	amountOutUSDCFloat64, _ := amountOutUSDC.Float64()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		e.campaignService.RecordUSDCSwapTotalAmount(senderAddress, amountInUSDCFloat64)
+	}()
+
+	go func() {
+		defer wg.Done()
+		e.campaignService.RecordUSDCSwapTotalAmount(senderAddress, amountOutUSDCFloat64)
+	}()
+
+	wg.Wait()
 
 	return nil
 }
