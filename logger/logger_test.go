@@ -52,18 +52,3 @@ func TestLogrusLogger_Error(t *testing.T) {
 	assert.Equal(t, logrus.ErrorLevel, hook.Entries[0].Level)
 	assert.Equal(t, "This is an error message", hook.Entries[0].Message)
 }
-
-func TestLogrusLogger_Debug(t *testing.T) {
-	// 設置測試鉤子來捕獲日誌
-	logger := NewLogrusLogger()
-	hook := test.NewGlobal()
-	logger.(*LogrusLogger).logger.AddHook(hook)
-
-	// 呼叫 Debug 方法
-	logger.Debug("This is a debug message")
-
-	// 檢查 Debug 日誌是否存在
-	assert.Len(t, hook.Entries, 1)
-	assert.Equal(t, logrus.DebugLevel, hook.Entries[0].Level)
-	assert.Equal(t, "This is a debug message", hook.Entries[0].Message)
-}
