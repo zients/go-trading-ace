@@ -27,4 +27,5 @@ func (h *CampaignRoutes) RegisterCampaignRoutes() {
 
 	group.GET("/start", h.campaignController.StartCampaign)
 	group.GET("/histories/:address", h.campaignController.GetPointHistories)
+	group.GET("/tasks/:address", h.campaignController.GetTaskStatus)
 }

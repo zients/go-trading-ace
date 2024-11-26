@@ -24,3 +24,8 @@ func (m *MockCampaignService) RecordUSDCSwapTotalAmount(senderAddress string, am
 	args := m.Called(senderAddress, amount)
 	return args.Get(0).(float64), args.Error(1)
 }
+
+func (m *MockCampaignService) GetTaskStatus(address string) ([]*models.TaskWithTaskHistory, error) {
+	args := m.Called(address)
+	return args.Get(0).([]*models.TaskWithTaskHistory), args.Error(1)
+}
