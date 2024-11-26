@@ -12,6 +12,8 @@ import (
 	"trading-ace/logger"
 	"trading-ace/models"
 	"trading-ace/repositories"
+
+	"github.com/go-redis/redis/v8"
 )
 
 type ICampaignService interface {
@@ -299,7 +301,7 @@ func (s *CampaignService) calculateSharePoolPoint(task *entities.Task) error {
 		return err
 	}
 
-	points := task.Points
+	taskPoints := task.Points
 
 	now := time.Now().UTC()
 	for address, v := range swapAmountMap {
@@ -309,7 +311,7 @@ func (s *CampaignService) calculateSharePoolPoint(task *entities.Task) error {
 		}
 
 		quotes := amount / totalAmount
-		rewards := points * quotes
+		rewards := taskPoints * quotes
 
 		history := &entities.TaskHistory{
 			Address:      address,
@@ -323,7 +325,10 @@ func (s *CampaignService) calculateSharePoolPoint(task *entities.Task) error {
 
 		if _, err := s.taskHistoryRepo.Create(history); err != nil {
 			s.logger.Error("create history failed for address %s, %v", address, err)
+			continue
 		}
+
+		s.redisHelper.ZAdd(fmt.Sprintf("%s_rank", key), &redis.Z{Score: rewards, Member: address})
 	}
 
 	return nil
