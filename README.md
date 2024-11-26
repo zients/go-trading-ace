@@ -29,19 +29,35 @@ Before getting started, ensure that you have the following software installed on
     ```
     git clone https://github.com/tsen1220/go-trading-ace.git
     ```
-2. Build and Run with Docker Compose
+2. Configure the database, Redis, infura key to connect ethereum using `/config/config.yml`
+    ```
+    database:
+      host: "postgres"
+      user: "root"
+      password: "root"
+      port: 5432
+      name: "trading-ace"
+      sslmode: "disable"
+
+    redis:
+      prefix: "trading-ace:"
+      host: "redis"
+      port: 6379
+
+    infura:
+      key: "<your-infura-project-id>"
+    ```
+3. Build and Run with Docker Compose
     ```
     docker-compose up --build
     ```
-3. Run the Project Locally (Without Docker)  
+4. Run the Project Locally (Without Docker)  
    If you prefer to run the project locally, follow these steps:  
 
    - Download the necessary dependencies:  
      ```bash
      go mod tidy
      ```  
-
-   - Configure the database and Redis using `./config/config.yml`. 
 
    - Run the application:  
      ```bash
@@ -67,5 +83,10 @@ Before getting started, ensure that you have the following software installed on
 ### Running Tests
 To run the tests for the project, execute the following command:
 ```
-go test ./tests
+go test ./...
+```
+
+If you want to get coverage info:
+```
+go test ./... -cover
 ```
