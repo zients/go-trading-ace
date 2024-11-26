@@ -176,7 +176,7 @@ func TestGetByAddressIncludingTask(t *testing.T) {
 			))
 
 	// 呼叫 GetByAddressIncludingTask 函數
-	results, err := repo.GetByAddressIncludingTask(address)
+	results, err := repo.GetByAddressIncludingTasks(address)
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)
 	assert.Equal(t, expectedResults[0].TaskHistory.Address, results[0].TaskHistory.Address)
