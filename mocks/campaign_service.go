@@ -1,6 +1,7 @@
 package mocks
 
 import (
+	"trading-ace/entities"
 	"trading-ace/models"
 
 	"github.com/stretchr/testify/mock"
@@ -28,4 +29,14 @@ func (m *MockCampaignService) RecordUSDCSwapTotalAmount(senderAddress string, am
 func (m *MockCampaignService) GetTaskStatus(address string) ([]*models.TaskWithTaskHistory, error) {
 	args := m.Called(address)
 	return args.Get(0).([]*models.TaskWithTaskHistory), args.Error(1)
+}
+
+func (m *MockCampaignService) FindOnboardingTask() (*entities.Task, error) {
+	args := m.Called()
+	return args.Get(0).(*entities.Task), args.Error(1)
+}
+
+func (m *MockCampaignService) FindCurrentSharePoolTask() (*entities.Task, error) {
+	args := m.Called()
+	return args.Get(0).(*entities.Task), args.Error(1)
 }

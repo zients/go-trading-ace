@@ -21,6 +21,8 @@ type ICampaignService interface {
 	GetPointHistories(address string) ([]*models.TaskTaskHistoryPair, error)
 	RecordUSDCSwapTotalAmount(senderAddress string, amount float64) (float64, error)
 	GetTaskStatus(address string) ([]*models.TaskWithTaskHistory, error)
+	FindOnboardingTask() (*entities.Task, error)
+	FindCurrentSharePoolTask() (*entities.Task, error)
 }
 
 type CampaignService struct {
@@ -83,7 +85,7 @@ func (s *CampaignService) GetTaskStatus(address string) ([]*models.TaskWithTaskH
 
 func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount float64) (float64, error) {
 	// find current share task
-	task, err := s.findCurrentSharePoolTask()
+	task, err := s.FindCurrentSharePoolTask()
 	if err != nil {
 		return 0, err
 	}
@@ -108,7 +110,7 @@ func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount
 		return totalAmount, nil
 	}
 
-	onboardingTask, err := s.findOnboardingTask()
+	onboardingTask, err := s.FindOnboardingTask()
 	if err != nil {
 		return 0, err
 	}
@@ -205,7 +207,7 @@ func (s *CampaignService) createSharePoolTask() ([]*entities.Task, error) {
 	return results, nil
 }
 
-func (s *CampaignService) findCurrentSharePoolTask() (*entities.Task, error) {
+func (s *CampaignService) FindCurrentSharePoolTask() (*entities.Task, error) {
 	key := "curr_shared_pool_task"
 	redisData, err := s.redisHelper.Get(key)
 	if err == nil {
@@ -233,7 +235,7 @@ func (s *CampaignService) findCurrentSharePoolTask() (*entities.Task, error) {
 	return nil, fmt.Errorf("no active share pool task found")
 }
 
-func (s *CampaignService) findOnboardingTask() (*entities.Task, error) {
+func (s *CampaignService) FindOnboardingTask() (*entities.Task, error) {
 	key := "onboarding_task"
 	redisData, err := s.redisHelper.Get(key)
 	if err == nil {

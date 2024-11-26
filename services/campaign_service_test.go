@@ -126,3 +126,47 @@ func TestStartCampaign(t *testing.T) {
 	// 驗證 logger 是否有記錄啟動計劃
 	loggerMock.AssertCalled(t, "Info", mock.Anything)
 }
+
+func TestFindCurrentSharePoolTask(t *testing.T) {
+	// 設置模擬的 RedisHelper 和 TaskRepo
+	mockRedisHelper := new(mocks.MockRedisHelper)
+	mockTaskRepo := new(mocks.MockTaskRepository)
+
+	// 設置 CampaignService
+	service := &CampaignService{
+		redisHelper: mockRedisHelper,
+		taskRepo:    mockTaskRepo,
+	}
+
+	// 測試場景：Redis 已經有資料
+	mockRedisHelper.On("Get", "curr_shared_pool_task").Return(`{"id":1,"name":"share_pool","started_at":"2024-11-01T00:00:00Z","end_at":"2024-11-30T00:00:00Z"}`, nil)
+
+	task, err := service.FindCurrentSharePoolTask()
+
+	assert.NoError(t, err)
+	assert.Equal(t, "share_pool", task.Name)
+	mockRedisHelper.AssertExpectations(t)
+	mockTaskRepo.AssertExpectations(t)
+}
+
+func TestFindOnboardingTask(t *testing.T) {
+	// 設置模擬的 RedisHelper 和 TaskRepo
+	mockRedisHelper := new(mocks.MockRedisHelper)
+	mockTaskRepo := new(mocks.MockTaskRepository)
+
+	// 設置 CampaignService
+	service := &CampaignService{
+		redisHelper: mockRedisHelper,
+		taskRepo:    mockTaskRepo,
+	}
+
+	// 測試場景：Redis 已經有資料
+	mockRedisHelper.On("Get", "onboarding_task").Return(`{"id":1,"name":"onboarding","started_at":"2024-11-01T00:00:00Z","end_at":"2024-11-30T00:00:00Z"}`, nil)
+
+	task, err := service.FindOnboardingTask()
+
+	assert.NoError(t, err)
+	assert.Equal(t, "onboarding", task.Name)
+	mockRedisHelper.AssertExpectations(t)
+	mockTaskRepo.AssertExpectations(t)
+}
