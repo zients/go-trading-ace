@@ -12,8 +12,6 @@ type ITaskRepository interface {
 	FindByName(name string) (*entities.Task, error)
 	GetByName(name string) ([]*entities.Task, error)
 	IsExistedByName(name string) (bool, error)
-	Update(task *entities.Task) (*entities.Task, error)
-	Delete(id int64) error
 }
 
 type TaskRepository struct {
@@ -148,45 +146,4 @@ func (t *TaskRepository) IsExistedByName(name string) (bool, error) {
 	}
 
 	return exists, nil
-}
-
-func (t *TaskRepository) Update(task *entities.Task) (*entities.Task, error) {
-	query := `
-		UPDATE tasks
-		SET name = $1, description = $2, points = $3, started_at = $4, end_at = $5, 
-			period = $6, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $7
-		RETURNING id, name, description, points, started_at, end_at, created_at, updated_at
-	`
-
-	var updatedTask entities.Task
-	err := t.db.QueryRow(
-		query,
-		task.Name, task.Description, task.Points,
-		task.StartedAt, task.EndAt, task.Period,
-		task.ID,
-	).Scan(
-		&updatedTask.ID, &updatedTask.Name, &updatedTask.Description,
-		&updatedTask.Points, &updatedTask.StartedAt, &updatedTask.EndAt,
-		&updatedTask.Period, &updatedTask.CreatedAt, &updatedTask.UpdatedAt,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to update task: %w", err)
-	}
-
-	return &updatedTask, nil
-}
-
-func (t *TaskRepository) Delete(id int64) error {
-	query := `
-		DELETE FROM tasks
-		WHERE id = $1
-	`
-	_, err := t.db.Exec(query, id)
-	if err != nil {
-		return fmt.Errorf("failed to delete task: %w", err)
-	}
-
-	return nil
 }
