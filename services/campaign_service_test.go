@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"testing"
 	"time"
 	"trading-ace/config"
@@ -169,4 +170,57 @@ func TestFindOnboardingTask(t *testing.T) {
 	assert.Equal(t, "onboarding", task.Name)
 	mockRedisHelper.AssertExpectations(t)
 	mockTaskRepo.AssertExpectations(t)
+}
+
+func TestRecordUSDCSwapTotalAmount(t *testing.T) {
+	// Mock dependencies
+	mockRedisHelper := new(mocks.MockRedisHelper)
+	mockTaskRepo := new(mocks.MockTaskRepository)
+	mockTaskHistoryRepo := new(mocks.MockTaskHistoryRepository)
+
+	campaignService := &CampaignService{
+		redisHelper:     mockRedisHelper,
+		taskRepo:        mockTaskRepo,
+		taskHistoryRepo: mockTaskHistoryRepo,
+	}
+
+	// Mock data
+	senderAddress := "0x123"
+	amount := 100.0
+	currentTask := &entities.Task{
+		Name:   "share_pool_task",
+		Period: 1,
+	}
+	onboardingTask := &entities.Task{
+		ID:     1,
+		Name:   "onboarding_task",
+		Period: 1,
+	}
+	totalAmountStr := "100.0"
+
+	// Mock Redis responses
+	mockRedisHelper.On("HIncrFloat", mock.Anything, senderAddress, amount).Return(nil)
+	mockRedisHelper.On("HGet", mock.Anything, senderAddress).Return(totalAmountStr, nil)
+	mockRedisHelper.On("IncrFloat", mock.Anything, amount).Return(nil)
+	mockRedisHelper.On("Get", mock.Anything).Return(totalAmountStr, nil)
+
+	// Mock FindCurrentSharePoolTask response
+	mockTaskRepo.On("GetByName", "share_pool_task").Return([]*entities.Task{currentTask}, nil)
+	mockTaskRepo.On("FindByName", "onboarding_task").Return(onboardingTask, nil)
+
+	// Mock task history repo to simulate no existing onboarding task history
+	mockTaskHistoryRepo.On("FindByAddressAndTaskId", senderAddress, onboardingTask.ID).Return(nil, errors.New("not found"))
+
+	// Simulate successful creation of task history
+	mockTaskHistoryRepo.On("Create", mock.Anything).Return(nil)
+
+	// Call the method under test
+	totalAmountReturned, err := campaignService.RecordUSDCSwapTotalAmount(senderAddress, amount)
+
+	// Assert the results
+	assert.NoError(t, err)
+	assert.Equal(t, amount, totalAmountReturned)
+
+	// Assert that the Redis helper and task history repo methods were called
+	mockRedisHelper.AssertExpectations(t)
 }
