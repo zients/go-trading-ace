@@ -239,3 +239,56 @@ func (s *CampaignService) findOnboardingTask() (*entities.Task, error) {
 
 	return task, nil
 }
+
+func (s *CampaignService) calculateSharePoolPoint(task *entities.Task) error {
+	if task.Name != SharePoolTaskStr {
+		return fmt.Errorf("task is not shard pool task")
+	}
+
+	key := fmt.Sprintf("%s_%d", task.Name, task.Period)
+	totalKey := fmt.Sprintf("%s_total", key)
+
+	totalStr, err := s.redisHelper.Get(totalKey)
+	if err != nil {
+		return err
+	}
+
+	totalAmount, err := strconv.ParseFloat(totalStr, 64)
+	if err != nil {
+		return fmt.Errorf("failed to parse total amount from key %s: %w", totalKey, err)
+	}
+
+	swapAmountMap, err := s.redisHelper.HGetAll(key)
+	if err != nil {
+		return err
+	}
+
+	points := task.Points
+
+	now := time.Now().UTC()
+	for address, v := range swapAmountMap {
+		amount, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return err
+		}
+
+		quotes := amount / totalAmount
+		rewards := points * quotes
+
+		history := &entities.TaskHistory{
+			Address:      address,
+			TaskID:       task.ID,
+			RewardPoints: rewards,
+			Amount:       amount,
+			CompletedAt:  &now,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+
+		if _, err := s.taskHistoryRepo.Create(history); err != nil {
+			s.logger.Error("create history failed for address %s, %v", address, err)
+		}
+	}
+
+	return nil
+}

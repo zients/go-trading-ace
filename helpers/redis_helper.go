@@ -16,6 +16,7 @@ type IRedisHelper interface {
 	IncrFloat(key string, value float64) error
 	HSet(key string, field string, value interface{}) error
 	HGet(key string, field string) (string, error)
+	HGetAll(key string) (map[string]string, error)
 	HIncrFloat(key string, field string, value float64) error
 	ZAdd(key string, members ...*redis.Z) error
 	ZRange(key string, start, stop int64) ([]string, error)
@@ -97,6 +98,15 @@ func (r *RedisHelper) HGet(key string, field string) (string, error) {
 	}
 
 	return val, nil
+}
+
+func (r *RedisHelper) HGetAll(key string) (map[string]string, error) {
+	result, err := r.redisClient.HGetAll(context.Background(), key).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func (r *RedisHelper) HIncrFloat(key string, field string, value float64) error {

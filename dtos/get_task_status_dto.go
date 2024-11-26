@@ -22,7 +22,7 @@ const InProgress string = "In Progress"
 const Completed string = "Completed"
 
 func CovertTaskWithTaskHistoryToDTO(model *models.TaskWithTaskHistory) *TaskWithTaskHistoryDTO {
-	var now = time.Now()
+	var now = time.Now().UTC()
 	var status string
 
 	switch {
