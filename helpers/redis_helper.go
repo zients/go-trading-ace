@@ -101,7 +101,7 @@ func (r *RedisHelper) HGet(key string, field string) (string, error) {
 }
 
 func (r *RedisHelper) HGetAll(key string) (map[string]string, error) {
-	result, err := r.redisClient.HGetAll(context.Background(), key).Result()
+	result, err := r.redisClient.HGetAll(context.Background(), r.prefix+key).Result()
 	if err != nil {
 		return nil, err
 	}
