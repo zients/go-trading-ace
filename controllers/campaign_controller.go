@@ -11,6 +11,7 @@ import (
 type ICampaignController interface {
 	StartCampaign(ctx *gin.Context)
 	GetPointHistories(ctx *gin.Context)
+	GetTaskStatus(ctx *gin.Context)
 }
 
 type CampaignController struct {
@@ -51,6 +52,23 @@ func (h *CampaignController) GetPointHistories(ctx *gin.Context) {
 		}
 
 		results = append(results, dto)
+	}
+
+	ctx.JSON(200, gin.H{"status": "ok", "result": results})
+}
+
+func (h *CampaignController) GetTaskStatus(ctx *gin.Context) {
+	address := ctx.Param("address")
+
+	taskStatus, err := h.campaignService.GetTaskStatus(address)
+	if err != nil {
+		ctx.JSON(500, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	results := []*dtos.TaskWithTaskHistoryDTO{}
+	for _, v := range taskStatus {
+		results = append(results, dtos.CovertTaskWithTaskHistoryToDTO(v))
 	}
 
 	ctx.JSON(200, gin.H{"status": "ok", "result": results})

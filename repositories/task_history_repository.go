@@ -11,7 +11,7 @@ type ITaskHistoryRepository interface {
 	Create(taskHistory *entities.TaskHistory) (*entities.TaskHistory, error)
 	FindByID(id int64) (*entities.TaskHistory, error)
 	FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskHistory, error)
-	GetByAddressIncludingTasks(address string) ([]*models.GetByAddressIncludingTask, error)
+	GetByAddressIncludingTasks(address string) ([]*models.TaskTaskHistoryPair, error)
 }
 
 type TaskHistoryRepository struct {
@@ -97,7 +97,7 @@ func (r *TaskHistoryRepository) FindByAddressAndTaskId(address string, taskId in
 	return &result, nil
 }
 
-func (t *TaskHistoryRepository) GetByAddressIncludingTasks(address string) ([]*models.GetByAddressIncludingTask, error) {
+func (t *TaskHistoryRepository) GetByAddressIncludingTasks(address string) ([]*models.TaskTaskHistoryPair, error) {
 	query := `
 		SELECT th.id, th.address, th.reward_points, th.amount, th.completed_at,
 		       t.id, t.name, t.description, t.points, t.started_at, t.end_at, t.period, t.created_at, t.updated_at
@@ -113,7 +113,7 @@ func (t *TaskHistoryRepository) GetByAddressIncludingTasks(address string) ([]*m
 
 	defer rows.Close()
 
-	var results []*models.GetByAddressIncludingTask
+	var results []*models.TaskTaskHistoryPair
 	for rows.Next() {
 		task := &entities.Task{}
 		taskHistory := &entities.TaskHistory{}
@@ -131,7 +131,7 @@ func (t *TaskHistoryRepository) GetByAddressIncludingTasks(address string) ([]*m
 			return nil, fmt.Errorf("scan failed: %w", err)
 		}
 
-		results = append(results, &models.GetByAddressIncludingTask{
+		results = append(results, &models.TaskTaskHistoryPair{
 			Task:        task,
 			TaskHistory: taskHistory,
 		})

@@ -15,8 +15,9 @@ import (
 
 type ICampaignService interface {
 	StartCampaign() error
-	GetPointHistories(address string) ([]*models.GetByAddressIncludingTask, error)
+	GetPointHistories(address string) ([]*models.TaskTaskHistoryPair, error)
 	RecordUSDCSwapTotalAmount(senderAddress string, amount float64) (float64, error)
+	GetTaskStatus(address string) ([]*models.TaskWithTaskHistory, error)
 }
 
 type CampaignService struct {
@@ -66,8 +67,12 @@ func (s *CampaignService) StartCampaign() error {
 	return nil
 }
 
-func (s *CampaignService) GetPointHistories(address string) ([]*models.GetByAddressIncludingTask, error) {
+func (s *CampaignService) GetPointHistories(address string) ([]*models.TaskTaskHistoryPair, error) {
 	return s.taskHistoryRepo.GetByAddressIncludingTasks(address)
+}
+
+func (s *CampaignService) GetTaskStatus(address string) ([]*models.TaskWithTaskHistory, error) {
+	return s.taskRepo.GetByAddressAndNamesIncludingTaskHistories(address, []string{OnboardingTaskStr, SharePoolTaskStr})
 }
 
 func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount float64) (float64, error) {
