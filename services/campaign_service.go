@@ -67,7 +67,7 @@ func (s *CampaignService) StartCampaign() error {
 }
 
 func (s *CampaignService) GetPointHistories(address string) ([]*models.GetByAddressIncludingTask, error) {
-	return s.taskHistoryRepo.GetByAddressIncludingTask(address)
+	return s.taskHistoryRepo.GetByAddressIncludingTasks(address)
 }
 
 func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount float64) (float64, error) {

@@ -11,7 +11,7 @@ type ITaskHistoryRepository interface {
 	Create(taskHistory *entities.TaskHistory) (*entities.TaskHistory, error)
 	FindByID(id int64) (*entities.TaskHistory, error)
 	FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskHistory, error)
-	GetByAddressIncludingTask(address string) ([]*models.GetByAddressIncludingTask, error)
+	GetByAddressIncludingTasks(address string) ([]*models.GetByAddressIncludingTask, error)
 }
 
 type TaskHistoryRepository struct {
@@ -97,7 +97,7 @@ func (r *TaskHistoryRepository) FindByAddressAndTaskId(address string, taskId in
 	return &result, nil
 }
 
-func (t *TaskHistoryRepository) GetByAddressIncludingTask(address string) ([]*models.GetByAddressIncludingTask, error) {
+func (t *TaskHistoryRepository) GetByAddressIncludingTasks(address string) ([]*models.GetByAddressIncludingTask, error) {
 	query := `
 		SELECT th.id, th.address, th.reward_points, th.amount, th.completed_at,
 		       t.id, t.name, t.description, t.points, t.started_at, t.end_at, t.period, t.created_at, t.updated_at
