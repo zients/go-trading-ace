@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 	"trading-ace/config"
@@ -60,9 +61,12 @@ func (s *CampaignService) StartCampaign() error {
 	}
 
 	//share pool task
-	if err := s.createSharePoolTask(); err != nil {
+	shareTasks, err := s.createSharePoolTask()
+	if err != nil {
 		return err
 	}
+
+	s.startLimitedWeeklySettlementScheduler(shareTasks)
 
 	return nil
 }
@@ -157,17 +161,18 @@ func (s *CampaignService) createOnboardingTask() error {
 	return nil
 }
 
-func (s *CampaignService) createSharePoolTask() error {
+func (s *CampaignService) createSharePoolTask() ([]*entities.Task, error) {
 	isExisted, err := s.taskRepo.IsExistedByName(SharePoolTaskStr)
 	if err != nil {
-		return err
+		return []*entities.Task{}, err
 	}
 
 	if isExisted {
-		return fmt.Errorf("share pool task is existed")
+		return []*entities.Task{}, fmt.Errorf("share pool task is existed")
 	}
 
 	startedAt := time.Now().UTC()
+	results := []*entities.Task{}
 	for i := 1; i <= 4; i++ {
 		var duration = 7 * 24 * time.Hour
 		endAt := startedAt.Add(duration)
@@ -181,14 +186,21 @@ func (s *CampaignService) createSharePoolTask() error {
 			Period:      i,
 		}
 
-		if _, err := s.taskRepo.Create(newTask); err != nil {
-			return fmt.Errorf("failed to create task: %w", err)
+		task, err := s.taskRepo.Create(newTask)
+		if err != nil {
+			return []*entities.Task{}, fmt.Errorf("failed to create task: %w", err)
 		}
+
+		results = append(results, task)
 
 		startedAt = endAt
 	}
 
-	return nil
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Period < results[j].Period
+	})
+
+	return results, nil
 }
 
 func (s *CampaignService) findCurrentSharePoolTask() (*entities.Task, error) {
@@ -238,6 +250,30 @@ func (s *CampaignService) findOnboardingTask() (*entities.Task, error) {
 	s.redisHelper.Set(key, string(encodedTask), time.Until(*task.EndAt))
 
 	return task, nil
+}
+
+func (s *CampaignService) startLimitedWeeklySettlementScheduler(tasks []*entities.Task) {
+	ticker := time.NewTicker(7 * 24 * time.Hour)
+	maxRuns := 4
+	runCount := 0
+
+	go func() {
+		for range ticker.C {
+			if runCount >= maxRuns {
+				s.logger.Info("Weekly settlement scheduler reached its limit, stopping...")
+				ticker.Stop()
+				return
+			}
+
+			if err := s.calculateSharePoolPoint(tasks[runCount]); err != nil {
+				s.logger.Error("Failed to perform weekly settlement: %v", err)
+			}
+
+			runCount++
+		}
+	}()
+
+	s.logger.Info("Limited weekly settlement scheduler started")
 }
 
 func (s *CampaignService) calculateSharePoolPoint(task *entities.Task) error {
