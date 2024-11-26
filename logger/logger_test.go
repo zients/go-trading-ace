@@ -52,3 +52,13 @@ func TestLogrusLogger_Error(t *testing.T) {
 	assert.Equal(t, logrus.ErrorLevel, hook.Entries[0].Level)
 	assert.Equal(t, "This is an error message", hook.Entries[0].Message)
 }
+
+func TestLogrusLogger_Debug(t *testing.T) {
+	logger := NewLogrusLogger()
+	hook := test.NewGlobal()
+	logger.(*LogrusLogger).logger.AddHook(hook)
+
+	logger.Debug("This is an debug message")
+
+	assert.Len(t, hook.Entries, 0)
+}
