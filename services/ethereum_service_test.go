@@ -57,7 +57,7 @@ func TestRetrieveEventData(t *testing.T) {
 	// Sample event data
 	vLog := types.Log{
 		Topics: []common.Hash{
-			common.Hash{},                       // Event signature
+			{},                                  // Event signature
 			common.HexToHash("0xSenderAddress"), // Sender Address (mocked)
 		},
 		Data: []byte{0x01, 0x02}, // Mock event data (this will be used by ABI unpacking)
