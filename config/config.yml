@@ -7,8 +7,12 @@ database:
   password: "root"
   port: 5432
   name: "trading-ace"
+  sslmode: "disable"
 
 redis:
   prefix: "trading-ace:"
   host: "redis"
   port: 6379
+
+infura:
+  key: "your-key"

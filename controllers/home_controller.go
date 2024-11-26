@@ -11,12 +11,12 @@ type IHomeController interface {
 }
 
 type HomeController struct {
-	Config *config.Config
+	config *config.Config
 }
 
 func NewHomeController(config *config.Config) IHomeController {
 	return &HomeController{
-		Config: config,
+		config: config,
 	}
 }
 

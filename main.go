@@ -8,7 +8,11 @@ import (
 	"trading-ace/controllers"
 	"trading-ace/helpers"
 	"trading-ace/logger"
+	"trading-ace/repositories"
 	"trading-ace/routes"
+	"trading-ace/services"
+
+	_ "github.com/lib/pq"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -18,12 +22,13 @@ import (
 var ctx = context.Background()
 
 func NewDB(config *config.Config) (*sql.DB, error) {
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s",
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		config.Database.User,
 		config.Database.Password,
 		config.Database.Host,
 		config.Database.Port,
 		config.Database.Name,
+		config.Database.SSLMode,
 	)
 
 	db, err := sql.Open("postgres", connStr)
@@ -60,10 +65,16 @@ func NewGinServer() *gin.Engine {
 
 func SetupServer(
 	r *gin.Engine,
+	logger logger.ILogger,
 	config *config.Config,
+	ethereumService services.IEthereumService,
 	homeRoutes routes.IHomeRoutes,
+	campaignRoutes routes.ICampaignRoutes,
 ) {
+	go ethereumService.SubscribeEthereumSwap()
+
 	homeRoutes.RegisterHomeRoutes()
+	campaignRoutes.RegisterCampaignRoutes()
 
 	r.Run(fmt.Sprintf(":%d", config.Server.Port))
 }
@@ -81,9 +92,19 @@ func main() {
 
 			// Controllers
 			controllers.NewHomeController,
+			controllers.NewCampaignController,
+
+			// Repositories
+			repositories.NewTaskRepository,
+			repositories.NewTaskHistoryRepository,
 
 			// Routes
 			routes.NewHomeRoutes,
+			routes.NewCampaignRoutes,
+
+			// Services
+			services.NewCampaignService,
+			services.NewEthereumService,
 
 			// Helper
 			helpers.NewRedisHelper,
