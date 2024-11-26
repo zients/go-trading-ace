@@ -116,7 +116,7 @@ func TestFindByAddressAndTaskId(t *testing.T) {
 	assert.Equal(t, expectedTaskHistory.ID, result.ID)
 }
 
-func TestGetByAddressIncludingTask(t *testing.T) {
+func TestGetByAddressIncludingTasks(t *testing.T) {
 	// 設置 mock 資料庫
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -128,7 +128,7 @@ func TestGetByAddressIncludingTask(t *testing.T) {
 
 	// 設定測試數據
 	address := "test_address"
-	expectedResults := []*models.GetByAddressIncludingTask{
+	expectedResults := []*models.TaskTaskHistoryPair{
 		{
 			Task: &entities.Task{
 				ID:          1,
@@ -175,7 +175,7 @@ func TestGetByAddressIncludingTask(t *testing.T) {
 				expectedResults[0].Task.UpdatedAt,
 			))
 
-	// 呼叫 GetByAddressIncludingTask 函數
+	// 呼叫 GetByAddressIncludingTasks 函數
 	results, err := repo.GetByAddressIncludingTasks(address)
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)
