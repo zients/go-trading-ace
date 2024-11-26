@@ -305,3 +305,36 @@ func TestRedisHelper_ZRevRange(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, result)
 }
+
+func TestRedisHelper_ZRevRangeWithScores(t *testing.T) {
+	r, mock := setupRedisHelper()
+
+	key := "myZset"
+	start, stop := int64(0), int64(10)
+	expectedValues := []string{"value3", "value2", "value1"}
+	expectedScores := []float64{30.0, 20.0, 10.0}
+
+	// 模擬 Redis 返回的值和分數
+	mock.ExpectZRevRangeWithScores("test:"+key, start, stop).SetVal([]redis.Z{
+		{Member: "value3", Score: 30.0},
+		{Member: "value2", Score: 20.0},
+		{Member: "value1", Score: 10.0},
+	})
+
+	// 測試方法
+	values, scores, err := r.ZRevRangeWithScores(key, start, stop)
+
+	// 驗證結果
+	assert.NoError(t, err)
+	assert.Equal(t, expectedValues, values)
+	assert.Equal(t, expectedScores, scores)
+
+	// 模擬錯誤情況
+	mock.ExpectZRevRangeWithScores("test:"+key, start, stop).SetErr(errors.New("redis error"))
+
+	// 測試錯誤情況
+	values, scores, err = r.ZRevRangeWithScores(key, start, stop)
+	assert.Error(t, err)
+	assert.Nil(t, values)
+	assert.Nil(t, scores)
+}
