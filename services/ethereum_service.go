@@ -8,6 +8,7 @@ import (
 	"sync"
 	"trading-ace/config"
 	"trading-ace/logger"
+	"trading-ace/models"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -23,6 +24,10 @@ type IEthereumClient interface {
 
 type IEthereumService interface {
 	SubscribeEthereumSwap() error
+}
+
+type IABI interface {
+	UnpackIntoInterface(interface{}, string, []byte) error
 }
 
 type EthereumService struct {
@@ -61,7 +66,13 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 	defer sub.Unsubscribe()
 
 	for vLog := range logsCh {
-		err = e.processSwapEvent(vLog, parsedABI)
+		event, err := e.retrieveEventData(vLog, parsedABI)
+		if err != nil {
+			e.logger.Error(err)
+			continue
+		}
+
+		err = e.processSwapEvent(event)
 		if err != nil {
 			e.logger.Error(err)
 		}
@@ -70,7 +81,7 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 	return nil
 }
 
-func (e *EthereumService) connectToClient() (IEthereumClient, error) {
+func (e *EthereumService) connectToClient() (*ethclient.Client, error) {
 	url := fmt.Sprintf("wss://mainnet.infura.io/ws/v3/%s", e.config.Infura.Key)
 	client, err := ethclient.Dial(url)
 	if err != nil {
@@ -157,20 +168,21 @@ func (e *EthereumService) subscribeToSwapEvent(client IEthereumClient) (<-chan t
 	return logsCh, sub, nil
 }
 
-func (e *EthereumService) processSwapEvent(vLog types.Log, parsedABI abi.ABI) error {
-	event := struct {
-		Amount0In  *big.Int
-		Amount1In  *big.Int
-		Amount0Out *big.Int
-		Amount1Out *big.Int
-	}{}
+func (e *EthereumService) retrieveEventData(vLog types.Log, parsedABI IABI) (*models.SwapEvent, error) {
+	event := models.SwapEvent{}
 
 	err := parsedABI.UnpackIntoInterface(&event, "Swap", vLog.Data)
 	if err != nil {
-		return fmt.Errorf("failed to unpack log: %v", err)
+		return nil, fmt.Errorf("failed to unpack log: %v", err)
 	}
 
-	senderAddress := vLog.Topics[1].Hex()[26:]
+	event.SenderAddress = vLog.Topics[1].Hex()[26:]
+
+	return &event, nil
+}
+
+func (e *EthereumService) processSwapEvent(event *models.SwapEvent) error {
+	senderAddress := event.SenderAddress
 	e.logger.Info("Sender: %s", senderAddress)
 
 	// Convert amounts to float for easier logging
@@ -199,12 +211,12 @@ func (e *EthereumService) processSwapEvent(vLog types.Log, parsedABI abi.ABI) er
 
 	go func() {
 		defer wg.Done()
-		e.campaignService.RecordUSDCSwapTotalAmount(senderAddress, amountInUSDCFloat64)
+		e.campaignService.RecordUSDCSwapTotalAmount(event.SenderAddress, amountInUSDCFloat64)
 	}()
 
 	go func() {
 		defer wg.Done()
-		e.campaignService.RecordUSDCSwapTotalAmount(senderAddress, amountOutUSDCFloat64)
+		e.campaignService.RecordUSDCSwapTotalAmount(event.SenderAddress, amountOutUSDCFloat64)
 	}()
 
 	wg.Wait()
