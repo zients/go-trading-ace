@@ -22,6 +22,8 @@ Before getting started, ensure that you have the following software installed on
   curl -sSfL https://github.com/golang-migrate/migrate/releases/download/v4.15.2/migrate.linux-amd64.tar.gz | tar xz
   sudo mv migrate /usr/local/bin
   ```
+- **Infura Key**
+  You can get Infura key from [Infura](https://www.infura.io/).
 
 ### Installing and Running the Project
 
