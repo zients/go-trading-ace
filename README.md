@@ -1,4 +1,4 @@
-# Go Uniswap
+# Go Trading Ace
 
 ## Getting Started
 
@@ -47,7 +47,7 @@ Before getting started, ensure that you have the following software installed on
       port: 6379
 
     infura:
-      key: "<your-infura-project-id>"
+      key: "your-key"
     ```
 3. Build and Run with Docker Compose
     ```
