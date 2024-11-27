@@ -31,7 +31,7 @@ Before getting started, ensure that you have the following software installed on
     ```
     git clone https://github.com/tsen1220/go-trading-ace.git
     ```
-2. Configure the database, Redis, infura key to connect ethereum using `/config/config.yml`
+2. Configure the database, Redis, infura key to connect ethereum using `/config/config.yml`. And here is example key.
     ```
     database:
       host: "postgres"
@@ -45,8 +45,7 @@ Before getting started, ensure that you have the following software installed on
       prefix: "trading-ace:"
       host: "redis"
       port: 6379
-
-# Example Key
+    
     infura:
       key: "<your-infura-project-id>"
     ```
