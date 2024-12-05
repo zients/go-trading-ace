@@ -104,3 +104,27 @@ If you want to get coverage info:
 ```
 go test ./... -cover
 ```
+
+### Swagger API Docs
+
+You can view the API documentation from the following URL:
+
+```
+http://localhost:8080/swagger/index.html
+```
+
+This will open the interactive Swagger UI, allowing you to explore and test the API endpoints.
+
+If you want to update the Swagger documentation, follow these steps:
+
+1. Install the latest version of the swag tool:
+
+```
+go install github.com/swaggo/swag/cmd/swag@latest
+```
+
+2. Generate or update the Swagger documentation:
+
+```
+swag init
+```
