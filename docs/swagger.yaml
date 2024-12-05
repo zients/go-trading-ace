@@ -1,0 +1,111 @@
+info:
+  contact: {}
+paths:
+  /campaign/leaderboard/{taskName}/{period}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves the leaderboard for a specific task and period.
+      parameters:
+      - description: Task Name
+        in: path
+        name: taskName
+        required: true
+        type: string
+      - description: Period
+        in: path
+        name: period
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get leaderboard
+      tags:
+      - Campaign
+  /campaign/points/{address}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves the list of point histories for a given address.
+      parameters:
+      - description: User Address
+        in: path
+        name: address
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get point histories
+      tags:
+      - Campaign
+  /campaign/start:
+    get:
+      consumes:
+      - application/json
+      description: Starts a new campaign. Returns a success or error message.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Start a campaign
+      tags:
+      - Campaign
+  /campaign/task-status/{address}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves the task status for a given address.
+      parameters:
+      - description: User Address
+        in: path
+        name: address
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get task status
+      tags:
+      - Campaign
+swagger: "2.0"
