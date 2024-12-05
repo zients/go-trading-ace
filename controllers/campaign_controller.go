@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"strconv"
 	"trading-ace/config"
 	"trading-ace/dtos"
 	"trading-ace/services"
@@ -12,6 +13,7 @@ type ICampaignController interface {
 	StartCampaign(ctx *gin.Context)
 	GetPointHistories(ctx *gin.Context)
 	GetTaskStatus(ctx *gin.Context)
+	GetLeaderboard(ctx *gin.Context)
 }
 
 type CampaignController struct {
@@ -72,4 +74,22 @@ func (h *CampaignController) GetTaskStatus(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, gin.H{"status": "ok", "result": results})
+}
+
+func (h *CampaignController) GetLeaderboard(ctx *gin.Context) {
+	taskName := ctx.Param("taskName")
+	periodStr := ctx.Param("period")
+	period, err := strconv.ParseInt(periodStr, 10, 32)
+	if err != nil {
+		ctx.JSON(500, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	leaderboardEntries, err := h.campaignService.GetLeaderboard(taskName, int(period))
+	if err != nil {
+		ctx.JSON(500, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	ctx.JSON(200, gin.H{"status": "ok", "result": leaderboardEntries})
 }

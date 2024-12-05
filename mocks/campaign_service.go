@@ -40,3 +40,8 @@ func (m *MockCampaignService) FindCurrentSharePoolTask() (*entities.Task, error)
 	args := m.Called()
 	return args.Get(0).(*entities.Task), args.Error(1)
 }
+
+func (m *MockCampaignService) GetLeaderboard(taskName string, period int) ([]models.LeaderboardEntry, error) {
+	args := m.Called()
+	return args.Get(0).([]models.LeaderboardEntry), args.Error(1)
+}

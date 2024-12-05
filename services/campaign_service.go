@@ -23,6 +23,7 @@ type ICampaignService interface {
 	GetTaskStatus(address string) ([]*models.TaskWithTaskHistory, error)
 	FindOnboardingTask() (*entities.Task, error)
 	FindCurrentSharePoolTask() (*entities.Task, error)
+	GetLeaderboard(taskName string, period int) ([]models.LeaderboardEntry, error)
 }
 
 type CampaignService struct {
@@ -334,4 +335,27 @@ func (s *CampaignService) calculateSharePoolPoint(task *entities.Task) error {
 	}
 
 	return nil
+}
+
+func (s *CampaignService) GetLeaderboard(taskName string, period int) ([]models.LeaderboardEntry, error) {
+	key := fmt.Sprintf("%s_%d_rank", taskName, period)
+
+	members, scores, err := s.redisHelper.ZRevRangeWithScores(key, 0, -1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch leaderboard for key %s: %w", key, err)
+	}
+
+	if len(members) != len(scores) {
+		return nil, fmt.Errorf("mismatched lengths: %d members, %d scores", len(members), len(scores))
+	}
+
+	entries := make([]models.LeaderboardEntry, len(members))
+	for i := range members {
+		entries[i] = models.LeaderboardEntry{
+			Address: members[i],
+			Score:   scores[i],
+		}
+	}
+
+	return entries, nil
 }
