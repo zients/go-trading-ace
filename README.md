@@ -1,5 +1,17 @@
 # Go Trading Ace
 
+## Introduction
+Welcome to Go Trading Ace – a Go-based platform that I built to interact with decentralized finance (DeFi) protocols. The goal of this project is to leverage Go to fetch data from the Uniswap smart contracts and create a point-based rewards system for liquidity providers, turning liquidity provision into an engaging incentive activity.
+
+In this system, I extract data from Uniswap’s smart contracts, focusing on liquidity pools and trading volumes. Based on the liquidity provided by users, I calculate rewards and structure them into a "share pool" system. Users earn points for their participation, which are stored and tracked, creating a dynamic incentive system to encourage liquidity provision.
+
+Key Features:
+- Uniswap Integration: The system interacts with Uniswap's Ethereum-based smart contracts to fetch real-time data on liquidity pools and trading volumes.
+- Share Pool Rewards: A point-based reward system where users earn points based on the liquidity they provide. These points are recorded in a decentralized ledger for transparency.
+- Leaderboard System: Users can see where they rank on the leaderboard, showcasing the top contributors to liquidity pools based on their accumulated rewards.
+
+With Go Trading Ace, I’ve built a platform where developers and DeFi enthusiasts can easily integrate Uniswap data into their applications, develop liquidity incentives, and create engaging user experiences that promote participation in DeFi protocols.
+
 ## Getting Started
 
 These instructions will help you set up the project on your local machine for development and testing purposes.
