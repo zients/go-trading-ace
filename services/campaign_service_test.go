@@ -224,3 +224,42 @@ func TestRecordUSDCSwapTotalAmount(t *testing.T) {
 	// Assert that the Redis helper and task history repo methods were called
 	mockRedisHelper.AssertExpectations(t)
 }
+
+func TestCampaignService_GetLeaderboard(t *testing.T) {
+	// Mock dependencies
+	mockRedisHelper := new(mocks.MockRedisHelper)
+	mockTaskRepo := new(mocks.MockTaskRepository)
+
+	// Initialize the service with mocked dependencies
+	campaignService := &CampaignService{
+		redisHelper: mockRedisHelper,
+		taskRepo:    mockTaskRepo,
+	}
+
+	// Test case variables
+	taskName := "SharePoolTask"
+	period := 7
+	key := "SharePoolTask_7_rank"
+
+	t.Run("Success", func(t *testing.T) {
+		// Mock Redis response
+		mockRedisHelper.On("ZRevRangeWithScores", key, int64(0), int64(-1)).
+			Return([]string{"address1", "address2"}, []float64{100.5, 75.3}, nil)
+
+		// Expected result
+		expectedLeaderboard := []models.LeaderboardEntry{
+			{Address: "address1", Score: 100.5},
+			{Address: "address2", Score: 75.3},
+		}
+
+		// Call the method
+		result, err := campaignService.GetLeaderboard(taskName, period)
+
+		// Assertions
+		assert.NoError(t, err)
+		assert.Equal(t, expectedLeaderboard, result)
+
+		// Assert that Redis helper was called as expected
+		mockRedisHelper.AssertExpectations(t)
+	})
+}
