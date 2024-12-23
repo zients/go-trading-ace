@@ -15,5 +15,6 @@ RUN apk --no-cache add ca-certificates
 
 COPY --from=builder /app/main main
 COPY --from=builder /app/config config
+COPY --from=builder /app/docs/swagger.json /docs/swagger.json
 
 CMD ["/main"]
