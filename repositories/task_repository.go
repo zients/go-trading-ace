@@ -134,6 +134,10 @@ func (t *TaskRepository) GetByName(ctx context.Context, name string) ([]*entitie
 		tasks = append(tasks, task)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration failed: %w", err)
+	}
+
 	return tasks, nil
 }
 
@@ -154,6 +158,10 @@ func (t *TaskRepository) IsExistedByName(ctx context.Context, name string) (bool
 }
 
 func (t *TaskRepository) GetByAddressAndNamesIncludingTaskHistories(ctx context.Context, address string, names []string) ([]*models.TaskWithTaskHistory, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("task names cannot be empty")
+	}
+
 	placeholders := make([]string, len(names))
 	for i := range names {
 		placeholders[i] = fmt.Sprintf("$%d", i+2)
@@ -165,6 +173,7 @@ func (t *TaskRepository) GetByAddressAndNamesIncludingTaskHistories(ctx context.
 		FROM tasks t
 		LEFT JOIN task_histories th ON t.id = th.task_id AND th.address = $1
 		WHERE t.name IN (%s)
+		ORDER BY t.name, t.period
 	`, strings.Join(placeholders, ","))
 
 	args := make([]interface{}, len(names)+1)
@@ -197,6 +206,10 @@ func (t *TaskRepository) GetByAddressAndNamesIncludingTaskHistories(ctx context.
 		}
 
 		results = append(results, taskWithHistory)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration failed: %w", err)
 	}
 
 	return results, nil

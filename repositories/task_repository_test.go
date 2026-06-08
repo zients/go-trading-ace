@@ -150,6 +150,34 @@ func TestGetByName(t *testing.T) {
 	}
 }
 
+func TestGetByNameReturnsRowsError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewTaskRepository(db)
+	now := time.Now()
+
+	rows := sqlmock.NewRows([]string{
+		"id", "name", "description", "points", "started_at", "end_at", "period", "created_at", "updated_at",
+	}).AddRow(1, "Test Task", "Test Description", 10, now, now, 1, now, now).
+		RowError(0, errors.New("row iteration failed"))
+
+	mock.ExpectQuery(`
+		SELECT id, name, description, points, started_at, end_at, period, created_at, updated_at
+		FROM tasks
+		WHERE name = \$1
+	`).
+		WithArgs("Test Task").
+		WillReturnRows(rows)
+
+	tasks, err := repo.GetByName(context.Background(), "Test Task")
+
+	assert.Nil(t, tasks)
+	assert.ErrorContains(t, err, "row iteration failed")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestIsExistedByName(t *testing.T) {
 	// 測試場景：Task exists
 	t.Run("Task exists", func(t *testing.T) {
@@ -226,6 +254,7 @@ func TestGetByAddressAndNamesIncludingTaskHistoriesFiltersTasksByName(t *testing
 		FROM tasks t
 		LEFT JOIN task_histories th ON t.id = th.task_id AND th.address = $1
 		WHERE t.name IN ($2,$3)
+		ORDER BY t.name, t.period
 	`)
 
 	mock.ExpectQuery(queryPattern).
@@ -244,4 +273,53 @@ func TestGetByAddressAndNamesIncludingTaskHistoriesFiltersTasksByName(t *testing
 	require.Len(t, results, 1)
 	assert.Equal(t, "OnboardingTask", results[0].TaskName)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetByAddressAndNamesIncludingTaskHistoriesReturnsRowsError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewTaskRepository(db)
+	now := time.Now()
+
+	queryPattern := regexp.QuoteMeta(`
+		SELECT t.id, t.name, t.description, t.points, t.started_at, t.end_at, t.period, t.created_at, t.updated_at,
+			th.id, th.address, th.reward_points, th.amount, th.completed_at, th.created_at, th.updated_at
+		FROM tasks t
+		LEFT JOIN task_histories th ON t.id = th.task_id AND th.address = $1
+		WHERE t.name IN ($2)
+		ORDER BY t.name, t.period
+	`)
+
+	rows := sqlmock.NewRows([]string{
+		"id", "name", "description", "points", "started_at", "end_at", "period", "created_at", "updated_at",
+		"id", "address", "reward_points", "amount", "completed_at", "created_at", "updated_at",
+	}).AddRow(
+		1, "OnboardingTask", "Onboarding", 100, now, now, 1, now, now,
+		nil, nil, nil, nil, nil, nil, nil,
+	).RowError(0, errors.New("row iteration failed"))
+
+	mock.ExpectQuery(queryPattern).
+		WithArgs("address1", "OnboardingTask").
+		WillReturnRows(rows)
+
+	results, err := repo.GetByAddressAndNamesIncludingTaskHistories(context.Background(), "address1", []string{"OnboardingTask"})
+
+	assert.Nil(t, results)
+	assert.ErrorContains(t, err, "row iteration failed")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetByAddressAndNamesIncludingTaskHistoriesReturnsErrorForEmptyNames(t *testing.T) {
+	db, _, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewTaskRepository(db)
+
+	results, err := repo.GetByAddressAndNamesIncludingTaskHistories(context.Background(), "address1", nil)
+
+	assert.Nil(t, results)
+	assert.ErrorContains(t, err, "task names cannot be empty")
 }

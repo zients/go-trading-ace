@@ -2,11 +2,9 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/big"
 	"strings"
-	"sync"
 	"trading-ace/config"
 	"trading-ace/logger"
 	"trading-ace/models"
@@ -21,6 +19,7 @@ import (
 
 type IEthereumClient interface {
 	SubscribeFilterLogs(context.Context, ethereum.FilterQuery, chan<- types.Log) (ethereum.Subscription, error)
+	TransactionByHash(context.Context, common.Hash) (*types.Transaction, bool, error)
 }
 
 type IEthereumService interface {
@@ -39,6 +38,7 @@ type EthereumService struct {
 
 const wethDecimals int64 = 18
 const usdcDecimals int64 = 6
+const ethereumMainnetChainID int64 = 1
 
 func NewEthereumService(logger logger.ILogger, config *config.Config, campaignService ICampaignService) IEthereumService {
 	return &EthereumService{
@@ -83,7 +83,7 @@ func (e *EthereumService) SubscribeEthereumSwap(ctx context.Context) error {
 				continue
 			}
 
-			err = e.processSwapEvent(ctx, event)
+			err = e.processSwapEvent(ctx, client, event)
 			if err != nil {
 				e.logger.Error(err)
 			}
@@ -187,64 +187,74 @@ func (e *EthereumService) retrieveEventData(vLog types.Log, parsedABI IABI) (*mo
 	}
 
 	event.SenderAddress = vLog.Topics[1].Hex()[26:]
+	event.TxHash = vLog.TxHash
 
 	return &event, nil
 }
 
-func (e *EthereumService) processSwapEvent(ctx context.Context, event *models.SwapEvent) error {
+func (e *EthereumService) processSwapEvent(ctx context.Context, client IEthereumClient, event *models.SwapEvent) error {
 	senderAddress := event.SenderAddress
 	e.logger.Info("Sender: %s", senderAddress)
 
 	// Convert amounts to float for easier logging
-	amountInUSDC := new(big.Float).SetInt(event.Amount0In)
-	amountInUSDC.Quo(amountInUSDC, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(usdcDecimals), nil)))
+	amountInUSDC := tokenAmountFloat(event.Amount0In, usdcDecimals)
 	e.logger.Info("Amount0In (USDC): %s", amountInUSDC.String())
 
-	amountOutUSDC := new(big.Float).SetInt(event.Amount0Out)
-	amountOutUSDC.Quo(amountOutUSDC, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(usdcDecimals), nil)))
+	amountOutUSDC := tokenAmountFloat(event.Amount0Out, usdcDecimals)
 	e.logger.Info("Amount0Out (USDC): %s", amountOutUSDC.String())
 
-	amountInWETH := new(big.Float).SetInt(event.Amount1In)
-	amountInWETH.Quo(amountInWETH, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(wethDecimals), nil)))
+	amountInWETH := tokenAmountFloat(event.Amount1In, wethDecimals)
 	e.logger.Info("Amount1In (WETH): %s", amountInWETH.String())
 
-	amountOutWETH := new(big.Float).SetInt(event.Amount1Out)
-	amountOutWETH.Quo(amountOutWETH, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(wethDecimals), nil)))
+	amountOutWETH := tokenAmountFloat(event.Amount1Out, wethDecimals)
 	e.logger.Info("Amount1Out (WETH): %s", amountOutWETH.String())
 
-	// Record the campaign data asynchronously
 	amountInUSDCFloat64, _ := amountInUSDC.Float64()
 	amountOutUSDCFloat64, _ := amountOutUSDC.Float64()
-
-	var wg sync.WaitGroup
-	errCh := make(chan error, 2)
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		_, err := e.campaignService.RecordUSDCSwapTotalAmount(ctx, event.SenderAddress, amountInUSDCFloat64)
-		errCh <- err
-	}()
-
-	go func() {
-		defer wg.Done()
-		_, err := e.campaignService.RecordUSDCSwapTotalAmount(ctx, event.SenderAddress, amountOutUSDCFloat64)
-		errCh <- err
-	}()
-
-	wg.Wait()
-	close(errCh)
-
-	var recordErrors []error
-	for err := range errCh {
-		if err != nil {
-			recordErrors = append(recordErrors, err)
-		}
+	usdcAmount := amountInUSDCFloat64 + amountOutUSDCFloat64
+	if usdcAmount == 0 {
+		return nil
 	}
 
-	if err := errors.Join(recordErrors...); err != nil {
+	participantAddress, err := e.resolveTransactionSender(ctx, client, event.TxHash)
+	if err != nil {
+		return err
+	}
+
+	if _, err := e.campaignService.RecordUSDCSwapTotalAmount(ctx, participantAddress.Hex(), usdcAmount); err != nil {
 		return fmt.Errorf("failed to record swap event campaign data: %w", err)
 	}
 
 	return nil
+}
+
+func (e *EthereumService) resolveTransactionSender(ctx context.Context, client IEthereumClient, txHash common.Hash) (common.Address, error) {
+	tx, _, err := client.TransactionByHash(ctx, txHash)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("failed to fetch swap transaction %s: %w", txHash.Hex(), err)
+	}
+
+	if tx == nil {
+		return common.Address{}, fmt.Errorf("swap transaction not found: %s", txHash.Hex())
+	}
+
+	signer := types.LatestSignerForChainID(big.NewInt(ethereumMainnetChainID))
+	sender, err := types.Sender(signer, tx)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("failed to recover swap transaction sender %s: %w", txHash.Hex(), err)
+	}
+
+	return sender, nil
+}
+
+func tokenAmountFloat(amount *big.Int, decimals int64) *big.Float {
+	if amount == nil {
+		return big.NewFloat(0)
+	}
+
+	value := new(big.Float).SetInt(amount)
+	denominator := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(decimals), nil))
+	value.Quo(value, denominator)
+
+	return value
 }
