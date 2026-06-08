@@ -44,6 +44,34 @@ func TestCreateTaskHistory(t *testing.T) {
 	assert.Equal(t, taskHistory.Address, createdTaskHistory.Address)
 }
 
+func TestUpsertTaskHistoryUpdatesExistingAddressTaskPair(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewTaskHistoryRepository(db)
+	completedAt := time.Now().UTC()
+	taskHistory := &entities.TaskHistory{
+		Address:      "test_address",
+		TaskID:       1,
+		RewardPoints: 10.5,
+		Amount:       100.0,
+		CompletedAt:  &completedAt,
+	}
+
+	mock.ExpectQuery(`ON CONFLICT \(address, task_id\) DO UPDATE`).
+		WithArgs(taskHistory.Address, taskHistory.TaskID, taskHistory.RewardPoints, taskHistory.Amount, taskHistory.CompletedAt).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "address", "task_id", "reward_points", "amount", "completed_at", "created_at", "updated_at"}).
+			AddRow(1, taskHistory.Address, taskHistory.TaskID, taskHistory.RewardPoints, taskHistory.Amount, taskHistory.CompletedAt, time.Now(), time.Now()))
+
+	result, err := repo.Upsert(context.Background(), taskHistory)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, taskHistory.Address, result.Address)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestFindByID(t *testing.T) {
 	// 設置 mock 資料庫
 	db, mock, err := sqlmock.New()

@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"regexp"
 	"testing"
@@ -322,4 +323,129 @@ func TestGetByAddressAndNamesIncludingTaskHistoriesReturnsErrorForEmptyNames(t *
 
 	assert.Nil(t, results)
 	assert.ErrorContains(t, err, "task names cannot be empty")
+}
+
+func TestClaimDueSharePoolTaskClaimsOneDueUnsettledTask(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewTaskRepository(db)
+	now := time.Now().UTC()
+	startedAt := now.Add(-7 * 24 * time.Hour)
+	endAt := now.Add(-time.Hour)
+
+	mock.ExpectQuery(`UPDATE tasks`).
+		WithArgs("SharePoolTask", now).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "name", "description", "points", "started_at", "end_at", "period", "created_at", "updated_at",
+			"settlement_started_at", "settled_at",
+		}).AddRow(
+			7, "SharePoolTask", "SharePoolTask", 10000, startedAt, endAt, 2, now, now,
+			now, nil,
+		))
+
+	task, err := repo.ClaimDueSharePoolTask(context.Background(), now)
+
+	require.NoError(t, err)
+	require.NotNil(t, task)
+	assert.Equal(t, int64(7), task.ID)
+	assert.Equal(t, "SharePoolTask", task.Name)
+	assert.Equal(t, 2, task.Period)
+	assert.Equal(t, &now, task.SettlementStartedAt)
+	assert.Nil(t, task.SettledAt)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestClaimDueSharePoolTaskReturnsNilWhenNoTaskIsDue(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewTaskRepository(db)
+	now := time.Now().UTC()
+
+	mock.ExpectQuery(`UPDATE tasks`).
+		WithArgs("SharePoolTask", now).
+		WillReturnError(sql.ErrNoRows)
+
+	task, err := repo.ClaimDueSharePoolTask(context.Background(), now)
+
+	assert.NoError(t, err)
+	assert.Nil(t, task)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMarkSettled(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewTaskRepository(db)
+	settledAt := time.Now().UTC()
+	claimStartedAt := settledAt.Add(-time.Minute)
+
+	mock.ExpectExec(`UPDATE tasks`).
+		WithArgs(int64(7), claimStartedAt, settledAt).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	err = repo.MarkSettled(context.Background(), 7, claimStartedAt, settledAt)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMarkSettledReturnsErrorWhenClaimDoesNotMatch(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewTaskRepository(db)
+	settledAt := time.Now().UTC()
+	claimStartedAt := settledAt.Add(-time.Minute)
+
+	mock.ExpectExec(`UPDATE tasks`).
+		WithArgs(int64(7), claimStartedAt, settledAt).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	err = repo.MarkSettled(context.Background(), 7, claimStartedAt, settledAt)
+
+	assert.ErrorContains(t, err, "settlement claim does not match")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestReleaseSettlementClaim(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewTaskRepository(db)
+	claimStartedAt := time.Now().UTC()
+
+	mock.ExpectExec(`UPDATE tasks`).
+		WithArgs(int64(7), claimStartedAt).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	err = repo.ReleaseSettlementClaim(context.Background(), 7, claimStartedAt)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestReleaseSettlementClaimReturnsErrorWhenClaimDoesNotMatch(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewTaskRepository(db)
+	claimStartedAt := time.Now().UTC()
+
+	mock.ExpectExec(`UPDATE tasks`).
+		WithArgs(int64(7), claimStartedAt).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	err = repo.ReleaseSettlementClaim(context.Background(), 7, claimStartedAt)
+
+	assert.ErrorContains(t, err, "settlement claim does not match")
+	assert.NoError(t, mock.ExpectationsWereMet())
 }

@@ -2,6 +2,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 	"trading-ace/entities"
 	"trading-ace/models"
 
@@ -40,4 +41,28 @@ func (m *MockTaskRepository) IsExistedByName(ctx context.Context, name string) (
 func (m *MockTaskRepository) GetByAddressAndNamesIncludingTaskHistories(ctx context.Context, address string, names []string) ([]*models.TaskWithTaskHistory, error) {
 	args := m.Called(ctx, address, names)
 	return args.Get(0).([]*models.TaskWithTaskHistory), args.Error(1)
+}
+
+func (m *MockTaskRepository) ClaimDueSharePoolTask(ctx context.Context, now time.Time) (*entities.Task, error) {
+	args := m.Called(ctx, now)
+	return getTask(args, 0), args.Error(1)
+}
+
+func (m *MockTaskRepository) MarkSettled(ctx context.Context, id int64, claimStartedAt time.Time, settledAt time.Time) error {
+	args := m.Called(ctx, id, claimStartedAt, settledAt)
+	return args.Error(0)
+}
+
+func (m *MockTaskRepository) ReleaseSettlementClaim(ctx context.Context, id int64, claimStartedAt time.Time) error {
+	args := m.Called(ctx, id, claimStartedAt)
+	return args.Error(0)
+}
+
+func getTask(args mock.Arguments, index int) *entities.Task {
+	value := args.Get(index)
+	if value == nil {
+		return nil
+	}
+
+	return value.(*entities.Task)
 }

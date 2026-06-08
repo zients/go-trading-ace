@@ -12,4 +12,7 @@ type Task struct {
 	Period      int        `db:"period"`      // INT DEFAULT 1
 	CreatedAt   time.Time  `db:"created_at"`  // TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	UpdatedAt   time.Time  `db:"updated_at"`  // TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+	SettlementStartedAt *time.Time `db:"settlement_started_at"` // TIMESTAMP NULL
+	SettledAt           *time.Time `db:"settled_at"`            // TIMESTAMP NULL
 }

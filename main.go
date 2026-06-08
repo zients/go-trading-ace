@@ -24,6 +24,7 @@ import (
 )
 
 const startupTimeout = 10 * time.Second
+const settlementWorkerInterval = time.Hour
 
 func NewDB(config *config.Config) (*sql.DB, error) {
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
@@ -136,6 +137,47 @@ func SetupServer(
 	})
 }
 
+func SetupSettlementWorker(
+	lc fx.Lifecycle,
+	appCtx context.Context,
+	logger logger.ILogger,
+	campaignService services.ICampaignService,
+) {
+	settlementCtx, cancelSettlement := context.WithCancel(appCtx)
+
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go runSettlementWorker(settlementCtx, logger, campaignService, settlementWorkerInterval)
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			cancelSettlement()
+			return nil
+		},
+	})
+}
+
+func runSettlementWorker(
+	ctx context.Context,
+	logger logger.ILogger,
+	campaignService services.ICampaignService,
+	interval time.Duration,
+) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := campaignService.SettleDueSharePoolTasks(ctx); err != nil {
+				logger.Error("Share pool settlement worker failed: %v", err)
+			}
+		}
+	}
+}
+
 func main() {
 	app := fx.New(
 		fx.StartTimeout(startupTimeout),
@@ -169,7 +211,10 @@ func main() {
 			helpers.NewRedisHelper,
 			NewAppContext,
 		),
-		fx.Invoke(SetupServer),
+		fx.Invoke(
+			SetupServer,
+			SetupSettlementWorker,
+		),
 	)
 
 	app.Run()

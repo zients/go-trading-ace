@@ -23,6 +23,7 @@ Uniswap USDC/WETH Swap event
   -> USDC amount extraction
   -> Campaign service
   -> Redis volume accumulation
+  -> Hourly DB-driven settlement worker
   -> Reward calculation
   -> PostgreSQL task histories
   -> Campaign APIs
@@ -34,7 +35,7 @@ PostgreSQL is used for durable campaign records: task definitions and completed 
 
 ## Main Components
 
-- `main.go`: application wiring, database/Redis setup, Gin server startup.
+- `main.go`: application wiring, database/Redis setup, Gin server startup, hourly settlement worker startup.
 - `services/ethereum_service.go`: Infura connection, Uniswap swap subscription, event parsing.
 - `services/campaign_service.go`: campaign initialization, volume tracking, reward calculation, leaderboard reads.
 - `repositories/`: PostgreSQL access for tasks and task histories.
@@ -161,6 +162,7 @@ Implemented:
 - Real Ethereum event subscription for the USDC/WETH Uniswap V2 pool.
 - Campaign task initialization.
 - Redis volume accumulation.
+- DB-driven share-pool settlement state and hourly settlement worker.
 - PostgreSQL task history persistence.
 - Leaderboard API backed by Redis sorted sets.
 - Dockerized local services and CI tests.
@@ -170,8 +172,6 @@ Not production-ready yet:
 - Event listener reconnect/backoff behavior.
 - Historical backfill and event deduplication.
 - Participant attribution uses transaction sender (`tx.from`); aggregators and smart contract wallets may require deeper trace-based attribution.
-- Durable settlement worker state.
-- Multi-instance locking for reward settlement.
 - Automated database migrations during container startup.
 - Secrets management beyond local YAML configuration.
 - Multi-pool or multi-campaign configuration.
@@ -180,11 +180,10 @@ Not production-ready yet:
 
 If this prototype were extended into a production service, the next steps would be:
 
-1. Replace the in-memory weekly ticker with a DB-driven settlement worker.
-2. Track settlement status per task period to prevent duplicate reward distribution.
-3. Store last processed block and support historical backfill.
-4. Add reconnect/backoff handling for Ethereum subscriptions.
-5. Add event deduplication based on transaction hash and log index.
-6. Automate migrations as part of deployment.
-7. Move secrets to environment variables or a secret manager.
-8. Add integration tests covering API, PostgreSQL, and Redis together.
+1. Store last processed block and support historical backfill.
+2. Add reconnect/backoff handling for Ethereum subscriptions.
+3. Add event deduplication based on transaction hash and log index.
+4. Add settlement retry visibility, alerting, and operator controls.
+5. Automate migrations as part of deployment.
+6. Move secrets to environment variables or a secret manager.
+7. Add integration tests covering API, PostgreSQL, and Redis together.

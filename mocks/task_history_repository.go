@@ -17,6 +17,11 @@ func (m *MockTaskHistoryRepository) Create(ctx context.Context, taskHistory *ent
 	return getTaskHistory(args, 0), args.Error(1)
 }
 
+func (m *MockTaskHistoryRepository) Upsert(ctx context.Context, taskHistory *entities.TaskHistory) (*entities.TaskHistory, error) {
+	args := m.Called(ctx, taskHistory)
+	return getTaskHistory(args, 0), args.Error(1)
+}
+
 func (m *MockTaskHistoryRepository) FindByID(ctx context.Context, id int64) (*entities.TaskHistory, error) {
 	args := m.Called(ctx, id)
 	return getTaskHistory(args, 0), args.Error(1)
