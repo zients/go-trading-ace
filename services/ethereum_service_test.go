@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"testing"
@@ -39,7 +40,7 @@ func TestSubscribeToSwapEvent(t *testing.T) {
 	e := &EthereumService{}
 
 	// 呼叫 subscribeToSwapEvent 方法
-	logsCh, sub, err := e.subscribeToSwapEvent(mockClient)
+	logsCh, sub, err := e.subscribeToSwapEvent(context.Background(), mockClient)
 
 	// 驗證結果
 	assert.NoError(t, err, "expected no error")
@@ -47,6 +48,25 @@ func TestSubscribeToSwapEvent(t *testing.T) {
 	assert.NotNil(t, sub, "expected subscription to be returned")
 
 	// 驗證 Mock 方法被正確呼叫
+	mockClient.AssertExpectations(t)
+}
+
+func TestSubscribeToSwapEventUsesProvidedContext(t *testing.T) {
+	mockClient := new(mocks.MockEthereumClient)
+	mockSubscription := new(mocks.MockEthereumSubscription)
+	ctx := context.WithValue(context.Background(), struct{}{}, "ethereum-listener")
+
+	mockClient.On("SubscribeFilterLogs", mock.MatchedBy(func(actual context.Context) bool {
+		return actual == ctx
+	}), mock.Anything, mock.Anything).Return(mockSubscription, nil).Once()
+
+	e := &EthereumService{}
+
+	logsCh, sub, err := e.subscribeToSwapEvent(ctx, mockClient)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, logsCh)
+	assert.NotNil(t, sub)
 	mockClient.AssertExpectations(t)
 }
 
@@ -102,7 +122,7 @@ func TestProcessSwapEvent(t *testing.T) {
 	mockLogger.On("Info", mock.Anything).Return()
 
 	// Mock RecordUSDCSwapTotalAmount behavior
-	mockCampaignService.On("RecordUSDCSwapTotalAmount", "0xSenderAddress", mock.Anything).Return(100.0, nil)
+	mockCampaignService.On("RecordUSDCSwapTotalAmount", mock.Anything, "0xSenderAddress", mock.Anything).Return(100.0, nil)
 
 	// Create EthereumService instance
 	e := &EthereumService{
@@ -119,7 +139,7 @@ func TestProcessSwapEvent(t *testing.T) {
 	}
 
 	// Test processSwapEvent
-	err := e.processSwapEvent(event)
+	err := e.processSwapEvent(context.Background(), event)
 	assert.NoError(t, err, "expected no error")
 
 	// Verify expectations
@@ -127,7 +147,7 @@ func TestProcessSwapEvent(t *testing.T) {
 	mockCampaignService.AssertExpectations(t)
 
 	// Additional assertions for verifying specific behaviors
-	mockCampaignService.AssertCalled(t, "RecordUSDCSwapTotalAmount", "0xSenderAddress", mock.Anything)
+	mockCampaignService.AssertCalled(t, "RecordUSDCSwapTotalAmount", mock.Anything, "0xSenderAddress", mock.Anything)
 }
 
 func TestProcessSwapEventReturnsErrorWhenCampaignRecordingFails(t *testing.T) {
@@ -135,7 +155,7 @@ func TestProcessSwapEventReturnsErrorWhenCampaignRecordingFails(t *testing.T) {
 	mockCampaignService := new(mocks.MockCampaignService)
 
 	mockLogger.On("Info", mock.Anything).Return()
-	mockCampaignService.On("RecordUSDCSwapTotalAmount", "0xSenderAddress", mock.Anything).
+	mockCampaignService.On("RecordUSDCSwapTotalAmount", mock.Anything, "0xSenderAddress", mock.Anything).
 		Return(0.0, fmt.Errorf("record failed"))
 
 	e := &EthereumService{
@@ -151,7 +171,7 @@ func TestProcessSwapEventReturnsErrorWhenCampaignRecordingFails(t *testing.T) {
 		Amount1Out:    big.NewInt(10),
 	}
 
-	err := e.processSwapEvent(event)
+	err := e.processSwapEvent(context.Background(), event)
 
 	assert.ErrorContains(t, err, "record failed")
 	mockLogger.AssertExpectations(t)

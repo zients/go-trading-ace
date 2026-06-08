@@ -4,10 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
+	"net/http"
+	"time"
 	"trading-ace/config"
 	"trading-ace/controllers"
 	"trading-ace/helpers"
 	"trading-ace/logger"
+	"trading-ace/middlewares"
 	"trading-ace/repositories"
 	"trading-ace/routes"
 	"trading-ace/services"
@@ -19,7 +23,7 @@ import (
 	"go.uber.org/fx"
 )
 
-var ctx = context.Background()
+const startupTimeout = 10 * time.Second
 
 func NewDB(config *config.Config) (*sql.DB, error) {
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
@@ -36,7 +40,10 @@ func NewDB(config *config.Config) (*sql.DB, error) {
 		return nil, err
 	}
 
-	if err := db.Ping(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
 		return nil, err
 	}
 
@@ -50,6 +57,9 @@ func NewRedis(config *config.Config) (*redis.Client, error) {
 		DB:       0,
 	})
 
+	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
+	defer cancel()
+
 	_, err := rdb.Ping(ctx).Result()
 	if err != nil {
 		return nil, err
@@ -58,12 +68,28 @@ func NewRedis(config *config.Config) (*redis.Client, error) {
 	return rdb, nil
 }
 
-func NewGinServer() *gin.Engine {
+func NewGinServer(config *config.Config) *gin.Engine {
 	r := gin.Default()
+	r.Use(middlewares.Timeout(config.Server.RequestTimeout()))
 	return r
 }
 
+func NewAppContext(lc fx.Lifecycle) context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			cancel()
+			return nil
+		},
+	})
+
+	return ctx
+}
+
 func SetupServer(
+	lc fx.Lifecycle,
+	appCtx context.Context,
 	r *gin.Engine,
 	logger logger.ILogger,
 	config *config.Config,
@@ -71,16 +97,49 @@ func SetupServer(
 	homeRoutes routes.IHomeRoutes,
 	campaignRoutes routes.ICampaignRoutes,
 ) {
-	go ethereumService.SubscribeEthereumSwap()
-
 	homeRoutes.RegisterHomeRoutes()
 	campaignRoutes.RegisterCampaignRoutes()
 
-	r.Run(fmt.Sprintf(":%d", config.Server.Port))
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", config.Server.Port),
+		Handler: r,
+	}
+
+	ethereumCtx, cancelEthereum := context.WithCancel(appCtx)
+
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			listener, err := net.Listen("tcp", server.Addr)
+			if err != nil {
+				cancelEthereum()
+				return fmt.Errorf("failed to listen on %s: %w", server.Addr, err)
+			}
+
+			go func() {
+				if err := ethereumService.SubscribeEthereumSwap(ethereumCtx); err != nil {
+					logger.Error("Ethereum swap subscription stopped: %v", err)
+				}
+			}()
+
+			go func() {
+				if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+					logger.Error("HTTP server stopped unexpectedly: %v", err)
+				}
+			}()
+
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			cancelEthereum()
+			return server.Shutdown(ctx)
+		},
+	})
 }
 
 func main() {
 	app := fx.New(
+		fx.StartTimeout(startupTimeout),
+		fx.StopTimeout(startupTimeout),
 		fx.Provide(
 
 			// Base
@@ -108,9 +167,10 @@ func main() {
 
 			// Helper
 			helpers.NewRedisHelper,
+			NewAppContext,
 		),
 		fx.Invoke(SetupServer),
 	)
 
-	app.Start(ctx)
+	app.Run()
 }

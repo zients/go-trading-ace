@@ -74,6 +74,7 @@ Example local Docker configuration:
 ```yaml
 server:
   port: 8080
+  request_timeout_seconds: 10
 
 database:
   host: "postgres"
