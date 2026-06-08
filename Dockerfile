@@ -1,4 +1,4 @@
-FROM golang:1.26.4-alpine as builder
+FROM golang:1.26.4-alpine AS builder
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ RUN go build -o main .
 # alpine environment
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates netcat-openbsd
 
 COPY --from=builder /app/main main
 COPY --from=builder /app/config config
