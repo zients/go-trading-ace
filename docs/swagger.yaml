@@ -1,6 +1,33 @@
 info:
   contact: {}
 paths:
+  /campaign/histories/{address}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves the list of point histories for a given address.
+      parameters:
+      - description: User Address
+        in: path
+        name: address
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get point histories
+      tags:
+      - Campaign
   /campaign/leaderboard/{taskName}/{period}:
     get:
       consumes:
@@ -33,33 +60,6 @@ paths:
       summary: Get leaderboard
       tags:
       - Campaign
-  /campaign/points/{address}:
-    get:
-      consumes:
-      - application/json
-      description: Retrieves the list of point histories for a given address.
-      parameters:
-      - description: User Address
-        in: path
-        name: address
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get point histories
-      tags:
-      - Campaign
   /campaign/start:
     get:
       consumes:
@@ -81,7 +81,7 @@ paths:
       summary: Start a campaign
       tags:
       - Campaign
-  /campaign/task-status/{address}:
+  /campaign/tasks/{address}:
     get:
       consumes:
       - application/json

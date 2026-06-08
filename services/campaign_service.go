@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 	"trading-ace/config"
 	"trading-ace/entities"
@@ -27,11 +28,13 @@ type ICampaignService interface {
 }
 
 type CampaignService struct {
-	config          *config.Config
-	logger          logger.ILogger
-	taskHistoryRepo repositories.ITaskHistoryRepository
-	taskRepo        repositories.ITaskRepository
-	redisHelper     helpers.IRedisHelper
+	config           *config.Config
+	logger           logger.ILogger
+	taskHistoryRepo  repositories.ITaskHistoryRepository
+	taskRepo         repositories.ITaskRepository
+	redisHelper      helpers.IRedisHelper
+	schedulerMu      sync.Mutex
+	schedulerStarted bool
 }
 
 const OnboardingTaskStr string = "OnboardingTask"
@@ -42,6 +45,7 @@ const OnboardingTaskTargetAmount float64 = 1000
 const SharePoolTaskStr string = "SharePoolTask"
 const SharePoolTaskDescription string = "SharePoolTask"
 const SharePoolTaskPoints float64 = 10000
+const SharePoolTaskPeriods int = 4
 
 func NewCampaignService(
 	config *config.Config,
@@ -60,12 +64,10 @@ func NewCampaignService(
 }
 
 func (s *CampaignService) StartCampaign() error {
-	// if exists
 	if err := s.createOnboardingTask(); err != nil {
 		return err
 	}
 
-	//share pool task
 	shareTasks, err := s.createSharePoolTask()
 	if err != nil {
 		return err
@@ -144,7 +146,7 @@ func (s *CampaignService) createOnboardingTask() error {
 	}
 
 	if isExisted {
-		return fmt.Errorf("onboarding task is existed")
+		return nil
 	}
 
 	startedAt := time.Now().UTC()
@@ -167,18 +169,18 @@ func (s *CampaignService) createOnboardingTask() error {
 }
 
 func (s *CampaignService) createSharePoolTask() ([]*entities.Task, error) {
-	isExisted, err := s.taskRepo.IsExistedByName(SharePoolTaskStr)
+	tasks, err := s.taskRepo.GetByName(SharePoolTaskStr)
 	if err != nil {
 		return []*entities.Task{}, err
 	}
 
-	if isExisted {
-		return []*entities.Task{}, fmt.Errorf("share pool task is existed")
+	if len(tasks) > 0 {
+		return validateSharePoolTasks(tasks)
 	}
 
 	startedAt := time.Now().UTC()
 	results := []*entities.Task{}
-	for i := 1; i <= 4; i++ {
+	for i := 1; i <= SharePoolTaskPeriods; i++ {
 		var duration = 7 * 24 * time.Hour
 		endAt := startedAt.Add(duration)
 
@@ -206,6 +208,39 @@ func (s *CampaignService) createSharePoolTask() ([]*entities.Task, error) {
 	})
 
 	return results, nil
+}
+
+func validateSharePoolTasks(tasks []*entities.Task) ([]*entities.Task, error) {
+	if len(tasks) != SharePoolTaskPeriods {
+		return nil, fmt.Errorf("expected %d share pool tasks, found %d", SharePoolTaskPeriods, len(tasks))
+	}
+
+	seenPeriods := make(map[int]bool, SharePoolTaskPeriods)
+	for _, task := range tasks {
+		if task == nil {
+			return nil, fmt.Errorf("share pool task list contains nil task")
+		}
+
+		if task.Name != SharePoolTaskStr {
+			return nil, fmt.Errorf("unexpected share pool task name %q", task.Name)
+		}
+
+		if task.Period < 1 || task.Period > SharePoolTaskPeriods {
+			return nil, fmt.Errorf("share pool task period %d is out of range", task.Period)
+		}
+
+		if seenPeriods[task.Period] {
+			return nil, fmt.Errorf("duplicate share pool task period %d", task.Period)
+		}
+
+		seenPeriods[task.Period] = true
+	}
+
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].Period < tasks[j].Period
+	})
+
+	return tasks, nil
 }
 
 func (s *CampaignService) FindCurrentSharePoolTask() (*entities.Task, error) {
@@ -258,6 +293,14 @@ func (s *CampaignService) FindOnboardingTask() (*entities.Task, error) {
 }
 
 func (s *CampaignService) startLimitedWeeklySettlementScheduler(tasks []*entities.Task) {
+	s.schedulerMu.Lock()
+	if s.schedulerStarted {
+		s.schedulerMu.Unlock()
+		return
+	}
+	s.schedulerStarted = true
+	s.schedulerMu.Unlock()
+
 	ticker := time.NewTicker(7 * 24 * time.Hour)
 	maxRuns := 4
 	runCount := 0

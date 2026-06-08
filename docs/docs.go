@@ -15,6 +15,46 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/campaign/histories/{address}": {
+            "get": {
+                "description": "Retrieves the list of point histories for a given address.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Campaign"
+                ],
+                "summary": "Get point histories",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User Address",
+                        "name": "address",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/campaign/leaderboard/{taskName}/{period}": {
             "get": {
                 "description": "Retrieves the leaderboard for a specific task and period.",
@@ -40,46 +80,6 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Period",
                         "name": "period",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/campaign/points/{address}": {
-            "get": {
-                "description": "Retrieves the list of point histories for a given address.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Campaign"
-                ],
-                "summary": "Get point histories",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User Address",
-                        "name": "address",
                         "in": "path",
                         "required": true
                     }
@@ -133,7 +133,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/campaign/task-status/{address}": {
+        "/campaign/tasks/{address}": {
             "get": {
                 "description": "Retrieves the task status for a given address.",
                 "consumes": [
@@ -186,6 +186,8 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
+	LeftDelim:        "{{",
+	RightDelim:       "}}",
 }
 
 func init() {
