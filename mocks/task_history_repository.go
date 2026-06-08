@@ -1,6 +1,7 @@
 package mocks
 
 import (
+	"context"
 	"trading-ace/entities"
 	"trading-ace/models"
 
@@ -11,23 +12,23 @@ type MockTaskHistoryRepository struct {
 	mock.Mock
 }
 
-func (m *MockTaskHistoryRepository) Create(taskHistory *entities.TaskHistory) (*entities.TaskHistory, error) {
-	args := m.Called(taskHistory)
+func (m *MockTaskHistoryRepository) Create(ctx context.Context, taskHistory *entities.TaskHistory) (*entities.TaskHistory, error) {
+	args := m.Called(ctx, taskHistory)
 	return getTaskHistory(args, 0), args.Error(1)
 }
 
-func (m *MockTaskHistoryRepository) FindByID(id int64) (*entities.TaskHistory, error) {
-	args := m.Called(id)
+func (m *MockTaskHistoryRepository) FindByID(ctx context.Context, id int64) (*entities.TaskHistory, error) {
+	args := m.Called(ctx, id)
 	return getTaskHistory(args, 0), args.Error(1)
 }
 
-func (m *MockTaskHistoryRepository) FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskHistory, error) {
-	args := m.Called(address, taskId)
+func (m *MockTaskHistoryRepository) FindByAddressAndTaskId(ctx context.Context, address string, taskId int64) (*entities.TaskHistory, error) {
+	args := m.Called(ctx, address, taskId)
 	return getTaskHistory(args, 0), args.Error(1)
 }
 
-func (m *MockTaskHistoryRepository) GetByAddressIncludingTasks(address string) ([]*models.TaskTaskHistoryPair, error) {
-	args := m.Called(address)
+func (m *MockTaskHistoryRepository) GetByAddressIncludingTasks(ctx context.Context, address string) ([]*models.TaskTaskHistoryPair, error) {
+	args := m.Called(ctx, address)
 	return args.Get(0).([]*models.TaskTaskHistoryPair), args.Error(1)
 }
 

@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -37,7 +38,7 @@ func TestCreateTaskHistory(t *testing.T) {
 			AddRow(1, taskHistory.Address, taskHistory.TaskID, taskHistory.RewardPoints, taskHistory.Amount, taskHistory.CompletedAt, time.Now(), time.Now()))
 
 	// 呼叫 Create 函數
-	createdTaskHistory, err := repo.Create(taskHistory)
+	createdTaskHistory, err := repo.Create(context.Background(), taskHistory)
 	assert.NoError(t, err)
 	assert.NotNil(t, createdTaskHistory)
 	assert.Equal(t, taskHistory.Address, createdTaskHistory.Address)
@@ -73,7 +74,7 @@ func TestFindByID(t *testing.T) {
 			AddRow(expectedTaskHistory.ID, expectedTaskHistory.Address, expectedTaskHistory.TaskID, expectedTaskHistory.RewardPoints, expectedTaskHistory.Amount, expectedTaskHistory.CompletedAt, expectedTaskHistory.CreatedAt, expectedTaskHistory.UpdatedAt))
 
 	// 呼叫 FindByID 函數
-	result, err := repo.FindByID(taskHistoryID)
+	result, err := repo.FindByID(context.Background(), taskHistoryID)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, expectedTaskHistory.ID, result.ID)
@@ -110,7 +111,7 @@ func TestFindByAddressAndTaskId(t *testing.T) {
 			AddRow(expectedTaskHistory.ID, expectedTaskHistory.Address, expectedTaskHistory.TaskID, expectedTaskHistory.RewardPoints, expectedTaskHistory.Amount, expectedTaskHistory.CompletedAt, expectedTaskHistory.CreatedAt, expectedTaskHistory.UpdatedAt))
 
 	// 呼叫 FindByAddressAndTaskId 函數
-	result, err := repo.FindByAddressAndTaskId(address, taskId)
+	result, err := repo.FindByAddressAndTaskId(context.Background(), address, taskId)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, expectedTaskHistory.ID, result.ID)
@@ -176,7 +177,7 @@ func TestGetByAddressIncludingTasks(t *testing.T) {
 			))
 
 	// 呼叫 GetByAddressIncludingTasks 函數
-	results, err := repo.GetByAddressIncludingTasks(address)
+	results, err := repo.GetByAddressIncludingTasks(context.Background(), address)
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)
 	assert.Equal(t, expectedResults[0].TaskHistory.Address, results[0].TaskHistory.Address)

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -18,13 +19,13 @@ import (
 )
 
 type ICampaignService interface {
-	StartCampaign() error
-	GetPointHistories(address string) ([]*models.TaskTaskHistoryPair, error)
-	RecordUSDCSwapTotalAmount(senderAddress string, amount float64) (float64, error)
-	GetTaskStatus(address string) ([]*models.TaskWithTaskHistory, error)
-	FindOnboardingTask() (*entities.Task, error)
-	FindCurrentSharePoolTask() (*entities.Task, error)
-	GetLeaderboard(taskName string, period int) ([]models.LeaderboardEntry, error)
+	StartCampaign(ctx context.Context) error
+	GetPointHistories(ctx context.Context, address string) ([]*models.TaskTaskHistoryPair, error)
+	RecordUSDCSwapTotalAmount(ctx context.Context, senderAddress string, amount float64) (float64, error)
+	GetTaskStatus(ctx context.Context, address string) ([]*models.TaskWithTaskHistory, error)
+	FindOnboardingTask(ctx context.Context) (*entities.Task, error)
+	FindCurrentSharePoolTask(ctx context.Context) (*entities.Task, error)
+	GetLeaderboard(ctx context.Context, taskName string, period int) ([]models.LeaderboardEntry, error)
 }
 
 type CampaignService struct {
@@ -35,6 +36,7 @@ type CampaignService struct {
 	redisHelper      helpers.IRedisHelper
 	schedulerMu      sync.Mutex
 	schedulerStarted bool
+	workerCtx        context.Context
 }
 
 const OnboardingTaskStr string = "OnboardingTask"
@@ -53,6 +55,7 @@ func NewCampaignService(
 	taskHistoryRepo repositories.ITaskHistoryRepository,
 	taskRepo repositories.ITaskRepository,
 	redisHelper helpers.IRedisHelper,
+	workerCtx context.Context,
 ) ICampaignService {
 	return &CampaignService{
 		config:          config,
@@ -60,15 +63,16 @@ func NewCampaignService(
 		taskHistoryRepo: taskHistoryRepo,
 		taskRepo:        taskRepo,
 		redisHelper:     redisHelper,
+		workerCtx:       workerCtx,
 	}
 }
 
-func (s *CampaignService) StartCampaign() error {
-	if err := s.createOnboardingTask(); err != nil {
+func (s *CampaignService) StartCampaign(ctx context.Context) error {
+	if err := s.createOnboardingTask(ctx); err != nil {
 		return err
 	}
 
-	shareTasks, err := s.createSharePoolTask()
+	shareTasks, err := s.createSharePoolTask(ctx)
 	if err != nil {
 		return err
 	}
@@ -78,33 +82,33 @@ func (s *CampaignService) StartCampaign() error {
 	return nil
 }
 
-func (s *CampaignService) GetPointHistories(address string) ([]*models.TaskTaskHistoryPair, error) {
-	return s.taskHistoryRepo.GetByAddressIncludingTasks(address)
+func (s *CampaignService) GetPointHistories(ctx context.Context, address string) ([]*models.TaskTaskHistoryPair, error) {
+	return s.taskHistoryRepo.GetByAddressIncludingTasks(ctx, address)
 }
 
-func (s *CampaignService) GetTaskStatus(address string) ([]*models.TaskWithTaskHistory, error) {
-	return s.taskRepo.GetByAddressAndNamesIncludingTaskHistories(address, []string{OnboardingTaskStr, SharePoolTaskStr})
+func (s *CampaignService) GetTaskStatus(ctx context.Context, address string) ([]*models.TaskWithTaskHistory, error) {
+	return s.taskRepo.GetByAddressAndNamesIncludingTaskHistories(ctx, address, []string{OnboardingTaskStr, SharePoolTaskStr})
 }
 
-func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount float64) (float64, error) {
+func (s *CampaignService) RecordUSDCSwapTotalAmount(ctx context.Context, senderAddress string, amount float64) (float64, error) {
 	// find current share task
-	task, err := s.FindCurrentSharePoolTask()
+	task, err := s.FindCurrentSharePoolTask(ctx)
 	if err != nil {
 		return 0, err
 	}
 
 	key := fmt.Sprintf("%s_%d", task.Name, task.Period)
-	if err := s.redisHelper.HIncrFloat(key, senderAddress, amount); err != nil {
+	if err := s.redisHelper.HIncrFloat(ctx, key, senderAddress, amount); err != nil {
 		return 0, fmt.Errorf("failed to increment address swap amount: %w", err)
 	}
 
-	totalAmountStr, err := s.redisHelper.HGet(key, senderAddress)
+	totalAmountStr, err := s.redisHelper.HGet(ctx, key, senderAddress)
 	if err != nil {
 		return 0, err
 	}
 
 	totalKey := fmt.Sprintf("%s_total", key)
-	if err := s.redisHelper.IncrFloat(totalKey, amount); err != nil {
+	if err := s.redisHelper.IncrFloat(ctx, totalKey, amount); err != nil {
 		return 0, fmt.Errorf("failed to increment total swap amount: %w", err)
 	}
 
@@ -118,13 +122,13 @@ func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount
 		return totalAmount, nil
 	}
 
-	onboardingTask, err := s.FindOnboardingTask()
+	onboardingTask, err := s.FindOnboardingTask(ctx)
 	if err != nil {
 		return 0, err
 	}
 
 	// find existed onboarding completed task record
-	_, err = s.taskHistoryRepo.FindByAddressAndTaskId(senderAddress, onboardingTask.ID)
+	_, err = s.taskHistoryRepo.FindByAddressAndTaskId(ctx, senderAddress, onboardingTask.ID)
 	if err == nil {
 		return totalAmount, nil
 	}
@@ -139,15 +143,15 @@ func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount
 		CompletedAt:  &now,
 	}
 
-	if _, err := s.taskHistoryRepo.Create(taskHistory); err != nil {
+	if _, err := s.taskHistoryRepo.Create(ctx, taskHistory); err != nil {
 		return 0, fmt.Errorf("failed to create onboarding task history: %w", err)
 	}
 
 	return totalAmount, nil
 }
 
-func (s *CampaignService) createOnboardingTask() error {
-	isExisted, err := s.taskRepo.IsExistedByName(OnboardingTaskStr)
+func (s *CampaignService) createOnboardingTask(ctx context.Context) error {
+	isExisted, err := s.taskRepo.IsExistedByName(ctx, OnboardingTaskStr)
 	if err != nil {
 		return err
 	}
@@ -168,15 +172,15 @@ func (s *CampaignService) createOnboardingTask() error {
 		Period:      1,
 	}
 
-	if _, err := s.taskRepo.Create(newTask); err != nil {
+	if _, err := s.taskRepo.Create(ctx, newTask); err != nil {
 		return fmt.Errorf("failed to create task: %w", err)
 	}
 
 	return nil
 }
 
-func (s *CampaignService) createSharePoolTask() ([]*entities.Task, error) {
-	tasks, err := s.taskRepo.GetByName(SharePoolTaskStr)
+func (s *CampaignService) createSharePoolTask(ctx context.Context) ([]*entities.Task, error) {
+	tasks, err := s.taskRepo.GetByName(ctx, SharePoolTaskStr)
 	if err != nil {
 		return []*entities.Task{}, err
 	}
@@ -200,7 +204,7 @@ func (s *CampaignService) createSharePoolTask() ([]*entities.Task, error) {
 			Period:      i,
 		}
 
-		task, err := s.taskRepo.Create(newTask)
+		task, err := s.taskRepo.Create(ctx, newTask)
 		if err != nil {
 			return []*entities.Task{}, fmt.Errorf("failed to create task: %w", err)
 		}
@@ -250,9 +254,9 @@ func validateSharePoolTasks(tasks []*entities.Task) ([]*entities.Task, error) {
 	return tasks, nil
 }
 
-func (s *CampaignService) FindCurrentSharePoolTask() (*entities.Task, error) {
+func (s *CampaignService) FindCurrentSharePoolTask(ctx context.Context) (*entities.Task, error) {
 	key := "curr_shared_pool_task"
-	redisData, err := s.redisHelper.Get(key)
+	redisData, err := s.redisHelper.Get(ctx, key)
 	if err == nil {
 		task := &entities.Task{}
 		json.Unmarshal([]byte(redisData), &task)
@@ -260,7 +264,7 @@ func (s *CampaignService) FindCurrentSharePoolTask() (*entities.Task, error) {
 		return task, nil
 	}
 
-	tasks, err := s.taskRepo.GetByName(SharePoolTaskStr)
+	tasks, err := s.taskRepo.GetByName(ctx, SharePoolTaskStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch share pool tasks: %w", err)
 	}
@@ -269,7 +273,7 @@ func (s *CampaignService) FindCurrentSharePoolTask() (*entities.Task, error) {
 	for _, task := range tasks {
 		if task.StartedAt != nil && task.EndAt != nil && now.After(*task.StartedAt) && now.Before(*task.EndAt) {
 			encodedTask, _ := json.Marshal(task)
-			s.redisHelper.Set(key, string(encodedTask), time.Until(*task.EndAt))
+			s.redisHelper.Set(ctx, key, string(encodedTask), time.Until(*task.EndAt))
 
 			return task, nil
 		}
@@ -278,9 +282,9 @@ func (s *CampaignService) FindCurrentSharePoolTask() (*entities.Task, error) {
 	return nil, fmt.Errorf("no active share pool task found")
 }
 
-func (s *CampaignService) FindOnboardingTask() (*entities.Task, error) {
+func (s *CampaignService) FindOnboardingTask(ctx context.Context) (*entities.Task, error) {
 	key := "onboarding_task"
-	redisData, err := s.redisHelper.Get(key)
+	redisData, err := s.redisHelper.Get(ctx, key)
 	if err == nil {
 		task := &entities.Task{}
 		json.Unmarshal([]byte(redisData), &task)
@@ -288,13 +292,13 @@ func (s *CampaignService) FindOnboardingTask() (*entities.Task, error) {
 		return task, nil
 	}
 
-	task, err := s.taskRepo.FindByName(OnboardingTaskStr)
+	task, err := s.taskRepo.FindByName(ctx, OnboardingTaskStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch onboarding task: %w", err)
 	}
 
 	encodedTask, _ := json.Marshal(task)
-	s.redisHelper.Set(key, string(encodedTask), time.Until(*task.EndAt))
+	s.redisHelper.Set(ctx, key, string(encodedTask), time.Until(*task.EndAt))
 
 	return task, nil
 }
@@ -313,25 +317,31 @@ func (s *CampaignService) startLimitedWeeklySettlementScheduler(tasks []*entitie
 	runCount := 0
 
 	go func() {
-		for range ticker.C {
-			if runCount >= maxRuns {
-				s.logger.Info("Weekly settlement scheduler reached its limit, stopping...")
-				ticker.Stop()
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.workerCtx.Done():
+				s.logger.Info("Weekly settlement scheduler stopped: %v", s.workerCtx.Err())
 				return
-			}
+			case <-ticker.C:
+				if runCount >= maxRuns {
+					s.logger.Info("Weekly settlement scheduler reached its limit, stopping...")
+					return
+				}
 
-			if err := s.calculateSharePoolPoint(tasks[runCount]); err != nil {
-				s.logger.Error("Failed to perform weekly settlement: %v", err)
-			}
+				if err := s.calculateSharePoolPoint(s.workerCtx, tasks[runCount]); err != nil {
+					s.logger.Error("Failed to perform weekly settlement: %v", err)
+				}
 
-			runCount++
+				runCount++
+			}
 		}
 	}()
 
 	s.logger.Info("Limited weekly settlement scheduler started")
 }
 
-func (s *CampaignService) calculateSharePoolPoint(task *entities.Task) error {
+func (s *CampaignService) calculateSharePoolPoint(ctx context.Context, task *entities.Task) error {
 	if task.Name != SharePoolTaskStr {
 		return fmt.Errorf("task is not shard pool task")
 	}
@@ -339,7 +349,7 @@ func (s *CampaignService) calculateSharePoolPoint(task *entities.Task) error {
 	key := fmt.Sprintf("%s_%d", task.Name, task.Period)
 	totalKey := fmt.Sprintf("%s_total", key)
 
-	totalStr, err := s.redisHelper.Get(totalKey)
+	totalStr, err := s.redisHelper.Get(ctx, totalKey)
 	if err != nil {
 		return err
 	}
@@ -349,7 +359,7 @@ func (s *CampaignService) calculateSharePoolPoint(task *entities.Task) error {
 		return fmt.Errorf("failed to parse total amount from key %s: %w", totalKey, err)
 	}
 
-	swapAmountMap, err := s.redisHelper.HGetAll(key)
+	swapAmountMap, err := s.redisHelper.HGetAll(ctx, key)
 	if err != nil {
 		return err
 	}
@@ -376,21 +386,21 @@ func (s *CampaignService) calculateSharePoolPoint(task *entities.Task) error {
 			UpdatedAt:    now,
 		}
 
-		if _, err := s.taskHistoryRepo.Create(history); err != nil {
+		if _, err := s.taskHistoryRepo.Create(ctx, history); err != nil {
 			s.logger.Error("create history failed for address %s, %v", address, err)
 			continue
 		}
 
-		s.redisHelper.ZAdd(fmt.Sprintf("%s_rank", key), &redis.Z{Score: rewards, Member: address})
+		s.redisHelper.ZAdd(ctx, fmt.Sprintf("%s_rank", key), &redis.Z{Score: rewards, Member: address})
 	}
 
 	return nil
 }
 
-func (s *CampaignService) GetLeaderboard(taskName string, period int) ([]models.LeaderboardEntry, error) {
+func (s *CampaignService) GetLeaderboard(ctx context.Context, taskName string, period int) ([]models.LeaderboardEntry, error) {
 	key := fmt.Sprintf("%s_%d_rank", taskName, period)
 
-	members, scores, err := s.redisHelper.ZRevRangeWithScores(key, 0, -1)
+	members, scores, err := s.redisHelper.ZRevRangeWithScores(ctx, key, 0, -1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch leaderboard for key %s: %w", key, err)
 	}

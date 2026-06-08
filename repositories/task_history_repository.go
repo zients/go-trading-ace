@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"trading-ace/entities"
@@ -8,10 +9,10 @@ import (
 )
 
 type ITaskHistoryRepository interface {
-	Create(taskHistory *entities.TaskHistory) (*entities.TaskHistory, error)
-	FindByID(id int64) (*entities.TaskHistory, error)
-	FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskHistory, error)
-	GetByAddressIncludingTasks(address string) ([]*models.TaskTaskHistoryPair, error)
+	Create(ctx context.Context, taskHistory *entities.TaskHistory) (*entities.TaskHistory, error)
+	FindByID(ctx context.Context, id int64) (*entities.TaskHistory, error)
+	FindByAddressAndTaskId(ctx context.Context, address string, taskId int64) (*entities.TaskHistory, error)
+	GetByAddressIncludingTasks(ctx context.Context, address string) ([]*models.TaskTaskHistoryPair, error)
 }
 
 type TaskHistoryRepository struct {
@@ -24,7 +25,7 @@ func NewTaskHistoryRepository(db *sql.DB) ITaskHistoryRepository {
 	}
 }
 
-func (r *TaskHistoryRepository) Create(taskHistory *entities.TaskHistory) (*entities.TaskHistory, error) {
+func (r *TaskHistoryRepository) Create(ctx context.Context, taskHistory *entities.TaskHistory) (*entities.TaskHistory, error) {
 	query := `
 		INSERT INTO task_histories (address, task_id, reward_points, amount, completed_at, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -33,7 +34,8 @@ func (r *TaskHistoryRepository) Create(taskHistory *entities.TaskHistory) (*enti
 
 	var result entities.TaskHistory
 
-	err := r.db.QueryRow(
+	err := r.db.QueryRowContext(
+		ctx,
 		query,
 		taskHistory.Address, taskHistory.TaskID, taskHistory.RewardPoints,
 		taskHistory.Amount, taskHistory.CompletedAt,
@@ -49,7 +51,7 @@ func (r *TaskHistoryRepository) Create(taskHistory *entities.TaskHistory) (*enti
 	return &result, nil
 }
 
-func (r *TaskHistoryRepository) FindByID(id int64) (*entities.TaskHistory, error) {
+func (r *TaskHistoryRepository) FindByID(ctx context.Context, id int64) (*entities.TaskHistory, error) {
 	query := `
 		SELECT id, address, task_id, reward_points, amount, completed_at, created_at, updated_at
 		FROM task_histories
@@ -57,7 +59,7 @@ func (r *TaskHistoryRepository) FindByID(id int64) (*entities.TaskHistory, error
 	`
 
 	var result entities.TaskHistory
-	err := r.db.QueryRow(query, id).Scan(
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&result.ID, &result.Address, &result.TaskID, &result.RewardPoints,
 		&result.Amount, &result.CompletedAt, &result.CreatedAt, &result.UpdatedAt,
 	)
@@ -73,7 +75,7 @@ func (r *TaskHistoryRepository) FindByID(id int64) (*entities.TaskHistory, error
 	return &result, nil
 }
 
-func (r *TaskHistoryRepository) FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskHistory, error) {
+func (r *TaskHistoryRepository) FindByAddressAndTaskId(ctx context.Context, address string, taskId int64) (*entities.TaskHistory, error) {
 	query := `
 		SELECT id, address, task_id, reward_points, amount, completed_at, created_at, updated_at
 		FROM task_histories
@@ -81,7 +83,7 @@ func (r *TaskHistoryRepository) FindByAddressAndTaskId(address string, taskId in
 	`
 
 	var result entities.TaskHistory
-	err := r.db.QueryRow(query, address, taskId).Scan(
+	err := r.db.QueryRowContext(ctx, query, address, taskId).Scan(
 		&result.ID, &result.Address, &result.TaskID, &result.RewardPoints,
 		&result.Amount, &result.CompletedAt, &result.CreatedAt, &result.UpdatedAt,
 	)
@@ -97,7 +99,7 @@ func (r *TaskHistoryRepository) FindByAddressAndTaskId(address string, taskId in
 	return &result, nil
 }
 
-func (t *TaskHistoryRepository) GetByAddressIncludingTasks(address string) ([]*models.TaskTaskHistoryPair, error) {
+func (t *TaskHistoryRepository) GetByAddressIncludingTasks(ctx context.Context, address string) ([]*models.TaskTaskHistoryPair, error) {
 	query := `
 		SELECT th.id, th.address, th.reward_points, th.amount, th.completed_at,
 		       t.id, t.name, t.description, t.points, t.started_at, t.end_at, t.period, t.created_at, t.updated_at
@@ -106,7 +108,7 @@ func (t *TaskHistoryRepository) GetByAddressIncludingTasks(address string) ([]*m
 		WHERE th.address = $1
 	`
 
-	rows, err := t.db.Query(query, address)
+	rows, err := t.db.QueryContext(ctx, query, address)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}

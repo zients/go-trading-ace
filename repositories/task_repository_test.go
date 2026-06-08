@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"errors"
 	"regexp"
 	"testing"
@@ -43,7 +44,7 @@ func TestCreate(t *testing.T) {
 			"id", "name", "description", "points", "started_at", "end_at", "period", "created_at", "updated_at",
 		}).AddRow(1, task.Name, task.Description, task.Points, task.StartedAt, task.EndAt, task.Period, now, now))
 
-	createdTask, err := repo.Create(task)
+	createdTask, err := repo.Create(context.Background(), task)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, createdTask)
@@ -75,7 +76,7 @@ func TestFindById(t *testing.T) {
 			"id", "name", "description", "points", "started_at", "end_at", "period", "created_at", "updated_at",
 		}).AddRow(1, "Test Task", "Test Description", 10, now, now, 1, now, now))
 
-	task, err := repo.FindById(1)
+	task, err := repo.FindById(context.Background(), 1)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, task)
@@ -107,7 +108,7 @@ func TestFindByName(t *testing.T) {
 			"id", "name", "description", "points", "started_at", "end_at", "period", "created_at", "updated_at",
 		}).AddRow(1, "Test Task", "Test Description", 10, now, now, 1, now, now))
 
-	task, err := repo.FindByName("Test Task")
+	task, err := repo.FindByName(context.Background(), "Test Task")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, task)
@@ -139,7 +140,7 @@ func TestGetByName(t *testing.T) {
 			"id", "name", "description", "points", "started_at", "end_at", "period", "created_at", "updated_at",
 		}).AddRow(1, "Test Task", "Test Description", 10, now, now, 1, now, now))
 
-	tasks, err := repo.GetByName("Test Task")
+	tasks, err := repo.GetByName(context.Background(), "Test Task")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, tasks)
@@ -162,7 +163,7 @@ func TestIsExistedByName(t *testing.T) {
 
 		repo := &TaskRepository{db: db}
 
-		result, err := repo.IsExistedByName("test-task")
+		result, err := repo.IsExistedByName(context.Background(), "test-task")
 
 		assert.NoError(t, err)
 		assert.Equal(t, true, result)
@@ -182,7 +183,7 @@ func TestIsExistedByName(t *testing.T) {
 
 		repo := &TaskRepository{db: db}
 
-		result, err := repo.IsExistedByName("non-existent-task")
+		result, err := repo.IsExistedByName(context.Background(), "non-existent-task")
 
 		assert.NoError(t, err)
 		assert.Equal(t, false, result)
@@ -202,7 +203,7 @@ func TestIsExistedByName(t *testing.T) {
 
 		repo := &TaskRepository{db: db}
 
-		result, err := repo.IsExistedByName("error-task")
+		result, err := repo.IsExistedByName(context.Background(), "error-task")
 
 		assert.Error(t, err)
 		assert.Equal(t, false, result)
@@ -237,7 +238,7 @@ func TestGetByAddressAndNamesIncludingTaskHistoriesFiltersTasksByName(t *testing
 			nil, nil, nil, nil, nil, nil, nil,
 		))
 
-	results, err := repo.GetByAddressAndNamesIncludingTaskHistories("address1", []string{"OnboardingTask", "SharePoolTask"})
+	results, err := repo.GetByAddressAndNamesIncludingTaskHistories(context.Background(), "address1", []string{"OnboardingTask", "SharePoolTask"})
 
 	require.NoError(t, err)
 	require.Len(t, results, 1)

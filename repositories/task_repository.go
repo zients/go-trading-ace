@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -9,12 +10,12 @@ import (
 )
 
 type ITaskRepository interface {
-	Create(task *entities.Task) (*entities.Task, error)
-	FindById(id int64) (*entities.Task, error)
-	FindByName(name string) (*entities.Task, error)
-	GetByName(name string) ([]*entities.Task, error)
-	IsExistedByName(name string) (bool, error)
-	GetByAddressAndNamesIncludingTaskHistories(address string, names []string) ([]*models.TaskWithTaskHistory, error)
+	Create(ctx context.Context, task *entities.Task) (*entities.Task, error)
+	FindById(ctx context.Context, id int64) (*entities.Task, error)
+	FindByName(ctx context.Context, name string) (*entities.Task, error)
+	GetByName(ctx context.Context, name string) ([]*entities.Task, error)
+	IsExistedByName(ctx context.Context, name string) (bool, error)
+	GetByAddressAndNamesIncludingTaskHistories(ctx context.Context, address string, names []string) ([]*models.TaskWithTaskHistory, error)
 }
 
 type TaskRepository struct {
@@ -27,7 +28,7 @@ func NewTaskRepository(db *sql.DB) ITaskRepository {
 	}
 }
 
-func (t *TaskRepository) Create(task *entities.Task) (*entities.Task, error) {
+func (t *TaskRepository) Create(ctx context.Context, task *entities.Task) (*entities.Task, error) {
 	query := `
 		INSERT INTO tasks (name, description, points, started_at, end_at, period, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -35,7 +36,8 @@ func (t *TaskRepository) Create(task *entities.Task) (*entities.Task, error) {
 	`
 
 	var createdTask entities.Task
-	err := t.db.QueryRow(
+	err := t.db.QueryRowContext(
+		ctx,
 		query,
 		task.Name, task.Description, task.Points,
 		task.StartedAt, task.EndAt, task.Period,
@@ -52,7 +54,7 @@ func (t *TaskRepository) Create(task *entities.Task) (*entities.Task, error) {
 	return &createdTask, nil
 }
 
-func (t *TaskRepository) FindById(id int64) (*entities.Task, error) {
+func (t *TaskRepository) FindById(ctx context.Context, id int64) (*entities.Task, error) {
 	query := `
 		SELECT id, name, description, points, started_at, end_at, period, created_at, updated_at
 		FROM tasks
@@ -60,7 +62,7 @@ func (t *TaskRepository) FindById(id int64) (*entities.Task, error) {
 	`
 
 	var task entities.Task
-	err := t.db.QueryRow(query, id).Scan(
+	err := t.db.QueryRowContext(ctx, query, id).Scan(
 		&task.ID, &task.Name, &task.Description, &task.Points,
 		&task.StartedAt, &task.EndAt, &task.Period,
 		&task.CreatedAt, &task.UpdatedAt,
@@ -77,7 +79,7 @@ func (t *TaskRepository) FindById(id int64) (*entities.Task, error) {
 	return &task, nil
 }
 
-func (t *TaskRepository) FindByName(name string) (*entities.Task, error) {
+func (t *TaskRepository) FindByName(ctx context.Context, name string) (*entities.Task, error) {
 	query := `
 		SELECT id, name, description, points, started_at, end_at, period, created_at, updated_at
 		FROM tasks
@@ -85,7 +87,7 @@ func (t *TaskRepository) FindByName(name string) (*entities.Task, error) {
 	`
 
 	var task entities.Task
-	err := t.db.QueryRow(query, name).Scan(
+	err := t.db.QueryRowContext(ctx, query, name).Scan(
 		&task.ID, &task.Name, &task.Description, &task.Points,
 		&task.StartedAt, &task.EndAt, &task.Period,
 		&task.CreatedAt, &task.UpdatedAt,
@@ -102,14 +104,14 @@ func (t *TaskRepository) FindByName(name string) (*entities.Task, error) {
 	return &task, nil
 }
 
-func (t *TaskRepository) GetByName(name string) ([]*entities.Task, error) {
+func (t *TaskRepository) GetByName(ctx context.Context, name string) ([]*entities.Task, error) {
 	query := `
 		SELECT id, name, description, points, started_at, end_at, period, created_at, updated_at
 		FROM tasks
 		WHERE name = $1
 	`
 
-	rows, err := t.db.Query(query, name)
+	rows, err := t.db.QueryContext(ctx, query, name)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
@@ -135,7 +137,7 @@ func (t *TaskRepository) GetByName(name string) ([]*entities.Task, error) {
 	return tasks, nil
 }
 
-func (t *TaskRepository) IsExistedByName(name string) (bool, error) {
+func (t *TaskRepository) IsExistedByName(ctx context.Context, name string) (bool, error) {
 	query := `
 		SELECT EXISTS (
 			SELECT 1 FROM tasks WHERE name = $1 LIMIT 1
@@ -143,7 +145,7 @@ func (t *TaskRepository) IsExistedByName(name string) (bool, error) {
 	`
 
 	var exists bool
-	err := t.db.QueryRow(query, name).Scan(&exists)
+	err := t.db.QueryRowContext(ctx, query, name).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("failed to check if task exists: %w", err)
 	}
@@ -151,7 +153,7 @@ func (t *TaskRepository) IsExistedByName(name string) (bool, error) {
 	return exists, nil
 }
 
-func (t *TaskRepository) GetByAddressAndNamesIncludingTaskHistories(address string, names []string) ([]*models.TaskWithTaskHistory, error) {
+func (t *TaskRepository) GetByAddressAndNamesIncludingTaskHistories(ctx context.Context, address string, names []string) ([]*models.TaskWithTaskHistory, error) {
 	placeholders := make([]string, len(names))
 	for i := range names {
 		placeholders[i] = fmt.Sprintf("$%d", i+2)
@@ -171,7 +173,7 @@ func (t *TaskRepository) GetByAddressAndNamesIncludingTaskHistories(address stri
 		args[i+1] = name
 	}
 
-	rows, err := t.db.Query(query, args...)
+	rows, err := t.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}

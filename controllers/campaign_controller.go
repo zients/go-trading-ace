@@ -38,7 +38,7 @@ func NewCampaignController(config *config.Config, campaignService services.ICamp
 // @Failure 400 {object} map[string]interface{}
 // @Router /campaign/start [get]
 func (h *CampaignController) StartCampaign(ctx *gin.Context) {
-	if err := h.campaignService.StartCampaign(); err != nil {
+	if err := h.campaignService.StartCampaign(ctx.Request.Context()); err != nil {
 		ctx.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
@@ -59,7 +59,7 @@ func (h *CampaignController) StartCampaign(ctx *gin.Context) {
 func (h *CampaignController) GetPointHistories(ctx *gin.Context) {
 	address := ctx.Param("address")
 
-	pointHistories, err := h.campaignService.GetPointHistories(address)
+	pointHistories, err := h.campaignService.GetPointHistories(ctx.Request.Context(), address)
 	if err != nil {
 		ctx.JSON(500, gin.H{"status": "error", "message": err.Error()})
 		return
@@ -91,7 +91,7 @@ func (h *CampaignController) GetPointHistories(ctx *gin.Context) {
 func (h *CampaignController) GetTaskStatus(ctx *gin.Context) {
 	address := ctx.Param("address")
 
-	taskStatus, err := h.campaignService.GetTaskStatus(address)
+	taskStatus, err := h.campaignService.GetTaskStatus(ctx.Request.Context(), address)
 	if err != nil {
 		ctx.JSON(500, gin.H{"status": "error", "message": err.Error()})
 		return
@@ -125,7 +125,7 @@ func (h *CampaignController) GetLeaderboard(ctx *gin.Context) {
 		return
 	}
 
-	leaderboardEntries, err := h.campaignService.GetLeaderboard(taskName, int(period))
+	leaderboardEntries, err := h.campaignService.GetLeaderboard(ctx.Request.Context(), taskName, int(period))
 	if err != nil {
 		ctx.JSON(500, gin.H{"status": "error", "message": err.Error()})
 		return

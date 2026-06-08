@@ -24,7 +24,7 @@ type IEthereumClient interface {
 }
 
 type IEthereumService interface {
-	SubscribeEthereumSwap() error
+	SubscribeEthereumSwap(ctx context.Context) error
 }
 
 type IABI interface {
@@ -48,8 +48,8 @@ func NewEthereumService(logger logger.ILogger, config *config.Config, campaignSe
 	}
 }
 
-func (e *EthereumService) SubscribeEthereumSwap() error {
-	client, err := e.connectToClient()
+func (e *EthereumService) SubscribeEthereumSwap(ctx context.Context) error {
+	client, err := e.connectToClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -59,32 +59,41 @@ func (e *EthereumService) SubscribeEthereumSwap() error {
 		return err
 	}
 
-	logsCh, sub, err := e.subscribeToSwapEvent(client)
+	logsCh, sub, err := e.subscribeToSwapEvent(ctx, client)
 	if err != nil {
 		return err
 	}
 
 	defer sub.Unsubscribe()
 
-	for vLog := range logsCh {
-		event, err := e.retrieveEventData(vLog, parsedABI)
-		if err != nil {
-			e.logger.Error(err)
-			continue
-		}
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-sub.Err():
+			return fmt.Errorf("ethereum subscription error: %w", err)
+		case vLog, ok := <-logsCh:
+			if !ok {
+				return nil
+			}
 
-		err = e.processSwapEvent(event)
-		if err != nil {
-			e.logger.Error(err)
+			event, err := e.retrieveEventData(vLog, parsedABI)
+			if err != nil {
+				e.logger.Error(err)
+				continue
+			}
+
+			err = e.processSwapEvent(ctx, event)
+			if err != nil {
+				e.logger.Error(err)
+			}
 		}
 	}
-
-	return nil
 }
 
-func (e *EthereumService) connectToClient() (*ethclient.Client, error) {
+func (e *EthereumService) connectToClient(ctx context.Context) (*ethclient.Client, error) {
 	url := fmt.Sprintf("wss://mainnet.infura.io/ws/v3/%s", e.config.Infura.Key)
-	client, err := ethclient.Dial(url)
+	client, err := ethclient.DialContext(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Ethereum client: %v", err)
 	}
@@ -149,7 +158,7 @@ func (e *EthereumService) parseABI() (abi.ABI, error) {
 	return parsedABI, nil
 }
 
-func (e *EthereumService) subscribeToSwapEvent(client IEthereumClient) (<-chan types.Log, ethereum.Subscription, error) {
+func (e *EthereumService) subscribeToSwapEvent(ctx context.Context, client IEthereumClient) (<-chan types.Log, ethereum.Subscription, error) {
 	contractAddressHex := "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
 	contractAddress := common.HexToAddress(contractAddressHex)
 	eventSignature := "Swap(address,uint256,uint256,uint256,uint256,address)"
@@ -161,7 +170,7 @@ func (e *EthereumService) subscribeToSwapEvent(client IEthereumClient) (<-chan t
 	}
 
 	logsCh := make(chan types.Log)
-	sub, err := client.SubscribeFilterLogs(context.Background(), query, logsCh)
+	sub, err := client.SubscribeFilterLogs(ctx, query, logsCh)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to subscribe: %v", err)
 	}
@@ -182,7 +191,7 @@ func (e *EthereumService) retrieveEventData(vLog types.Log, parsedABI IABI) (*mo
 	return &event, nil
 }
 
-func (e *EthereumService) processSwapEvent(event *models.SwapEvent) error {
+func (e *EthereumService) processSwapEvent(ctx context.Context, event *models.SwapEvent) error {
 	senderAddress := event.SenderAddress
 	e.logger.Info("Sender: %s", senderAddress)
 
@@ -213,13 +222,13 @@ func (e *EthereumService) processSwapEvent(event *models.SwapEvent) error {
 
 	go func() {
 		defer wg.Done()
-		_, err := e.campaignService.RecordUSDCSwapTotalAmount(event.SenderAddress, amountInUSDCFloat64)
+		_, err := e.campaignService.RecordUSDCSwapTotalAmount(ctx, event.SenderAddress, amountInUSDCFloat64)
 		errCh <- err
 	}()
 
 	go func() {
 		defer wg.Done()
-		_, err := e.campaignService.RecordUSDCSwapTotalAmount(event.SenderAddress, amountOutUSDCFloat64)
+		_, err := e.campaignService.RecordUSDCSwapTotalAmount(ctx, event.SenderAddress, amountOutUSDCFloat64)
 		errCh <- err
 	}()
 
