@@ -161,7 +161,8 @@ func (t *TaskRepository) GetByAddressAndNamesIncludingTaskHistories(address stri
 		SELECT t.id, t.name, t.description, t.points, t.started_at, t.end_at, t.period, t.created_at, t.updated_at,
 			th.id, th.address, th.reward_points, th.amount, th.completed_at, th.created_at, th.updated_at
 		FROM tasks t
-		LEFT JOIN task_histories th ON t.id = th.task_id AND th.address = $1 AND t.name IN (%s)
+		LEFT JOIN task_histories th ON t.id = th.task_id AND th.address = $1
+		WHERE t.name IN (%s)
 	`, strings.Join(placeholders, ","))
 
 	args := make([]interface{}, len(names)+1)

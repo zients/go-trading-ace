@@ -2,12 +2,14 @@ package repositories
 
 import (
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 	"trading-ace/entities"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreate(t *testing.T) {
@@ -207,4 +209,38 @@ func TestIsExistedByName(t *testing.T) {
 
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
+}
+
+func TestGetByAddressAndNamesIncludingTaskHistoriesFiltersTasksByName(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewTaskRepository(db)
+	now := time.Now()
+
+	queryPattern := regexp.QuoteMeta(`
+		SELECT t.id, t.name, t.description, t.points, t.started_at, t.end_at, t.period, t.created_at, t.updated_at,
+			th.id, th.address, th.reward_points, th.amount, th.completed_at, th.created_at, th.updated_at
+		FROM tasks t
+		LEFT JOIN task_histories th ON t.id = th.task_id AND th.address = $1
+		WHERE t.name IN ($2,$3)
+	`)
+
+	mock.ExpectQuery(queryPattern).
+		WithArgs("address1", "OnboardingTask", "SharePoolTask").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "name", "description", "points", "started_at", "end_at", "period", "created_at", "updated_at",
+			"id", "address", "reward_points", "amount", "completed_at", "created_at", "updated_at",
+		}).AddRow(
+			1, "OnboardingTask", "Onboarding", 100, now, now, 1, now, now,
+			nil, nil, nil, nil, nil, nil, nil,
+		))
+
+	results, err := repo.GetByAddressAndNamesIncludingTaskHistories("address1", []string{"OnboardingTask", "SharePoolTask"})
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "OnboardingTask", results[0].TaskName)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
