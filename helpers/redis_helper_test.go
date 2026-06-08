@@ -163,6 +163,82 @@ func TestRedisHelper_HIncrFloat(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestRedisHelper_RecordSwapVolumeOnceRecordsFirstEvent(t *testing.T) {
+	r, mock := setupRedisHelper()
+
+	eventKey := "swap_event:1:0xbeef:12"
+	volumeKey := "SharePoolTask_1"
+	totalKey := "SharePoolTask_1_total"
+	address := "0x123"
+	amount := 125.5
+	expiration := time.Hour
+
+	mock.ExpectEval(
+		recordSwapVolumeOnceScript,
+		[]string{"test:" + eventKey, "test:" + volumeKey, "test:" + totalKey},
+		address,
+		amount,
+		int64(expiration.Seconds()),
+	).SetVal([]interface{}{int64(1), "125.5"})
+
+	totalAmount, recorded, err := r.RecordSwapVolumeOnce(context.Background(), eventKey, volumeKey, totalKey, address, amount, expiration)
+
+	assert.NoError(t, err)
+	assert.True(t, recorded)
+	assert.Equal(t, 125.5, totalAmount)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRedisHelper_RecordSwapVolumeOnceSkipsDuplicateEvent(t *testing.T) {
+	r, mock := setupRedisHelper()
+
+	eventKey := "swap_event:1:0xbeef:12"
+	volumeKey := "SharePoolTask_1"
+	totalKey := "SharePoolTask_1_total"
+	address := "0x123"
+	amount := 125.5
+	expiration := time.Hour
+
+	mock.ExpectEval(
+		recordSwapVolumeOnceScript,
+		[]string{"test:" + eventKey, "test:" + volumeKey, "test:" + totalKey},
+		address,
+		amount,
+		int64(expiration.Seconds()),
+	).SetVal([]interface{}{int64(0), "0"})
+
+	totalAmount, recorded, err := r.RecordSwapVolumeOnce(context.Background(), eventKey, volumeKey, totalKey, address, amount, expiration)
+
+	assert.NoError(t, err)
+	assert.False(t, recorded)
+	assert.Equal(t, 0.0, totalAmount)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRedisHelper_RecordSwapVolumeOnceReturnsEvalError(t *testing.T) {
+	r, mock := setupRedisHelper()
+
+	eventKey := "swap_event:1:0xbeef:12"
+	volumeKey := "SharePoolTask_1"
+	totalKey := "SharePoolTask_1_total"
+	address := "0x123"
+	amount := 125.5
+	expiration := time.Hour
+
+	mock.ExpectEval(
+		recordSwapVolumeOnceScript,
+		[]string{"test:" + eventKey, "test:" + volumeKey, "test:" + totalKey},
+		address,
+		amount,
+		int64(expiration.Seconds()),
+	).SetErr(errors.New("redis eval failed"))
+
+	_, _, err := r.RecordSwapVolumeOnce(context.Background(), eventKey, volumeKey, totalKey, address, amount, expiration)
+
+	assert.ErrorContains(t, err, "redis eval failed")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRedisHelper_ZAdd(t *testing.T) {
 	r, mock := setupRedisHelper()
 

@@ -188,6 +188,7 @@ func (e *EthereumService) retrieveEventData(vLog types.Log, parsedABI IABI) (*mo
 
 	event.SenderAddress = vLog.Topics[1].Hex()[26:]
 	event.TxHash = vLog.TxHash
+	event.LogIndex = vLog.Index
 
 	return &event, nil
 }
@@ -221,11 +222,16 @@ func (e *EthereumService) processSwapEvent(ctx context.Context, client IEthereum
 		return err
 	}
 
-	if _, err := e.campaignService.RecordUSDCSwapTotalAmount(ctx, participantAddress.Hex(), usdcAmount); err != nil {
+	eventID := formatSwapEventID(ethereumMainnetChainID, event.TxHash, event.LogIndex)
+	if _, err := e.campaignService.RecordUSDCSwapTotalAmount(ctx, eventID, participantAddress.Hex(), usdcAmount); err != nil {
 		return fmt.Errorf("failed to record swap event campaign data: %w", err)
 	}
 
 	return nil
+}
+
+func formatSwapEventID(chainID int64, txHash common.Hash, logIndex uint) string {
+	return fmt.Sprintf("swap_event:%d:%s:%d", chainID, txHash.Hex(), logIndex)
 }
 
 func (e *EthereumService) resolveTransactionSender(ctx context.Context, client IEthereumClient, txHash common.Hash) (common.Address, error) {

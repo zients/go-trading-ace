@@ -9,6 +9,7 @@ import (
 type SwapEvent struct {
 	SenderAddress string
 	TxHash        common.Hash
+	LogIndex      uint
 	Amount0In     *big.Int
 	Amount1In     *big.Int
 	Amount0Out    *big.Int

@@ -21,7 +21,7 @@ import (
 type ICampaignService interface {
 	StartCampaign(ctx context.Context) error
 	GetPointHistories(ctx context.Context, address string) ([]*models.TaskTaskHistoryPair, error)
-	RecordUSDCSwapTotalAmount(ctx context.Context, senderAddress string, amount float64) (float64, error)
+	RecordUSDCSwapTotalAmount(ctx context.Context, eventID string, senderAddress string, amount float64) (float64, error)
 	GetTaskStatus(ctx context.Context, address string) ([]*models.TaskWithTaskHistory, error)
 	FindOnboardingTask(ctx context.Context) (*entities.Task, error)
 	FindCurrentSharePoolTask(ctx context.Context) (*entities.Task, error)
@@ -46,6 +46,7 @@ const SharePoolTaskStr string = "SharePoolTask"
 const SharePoolTaskDescription string = "SharePoolTask"
 const SharePoolTaskPoints float64 = 10000
 const SharePoolTaskPeriods int = 4
+const processedSwapEventRetention time.Duration = 30 * 24 * time.Hour
 
 func NewCampaignService(
 	config *config.Config,
@@ -83,7 +84,7 @@ func (s *CampaignService) GetTaskStatus(ctx context.Context, address string) ([]
 	return s.taskRepo.GetByAddressAndNamesIncludingTaskHistories(ctx, address, []string{OnboardingTaskStr, SharePoolTaskStr})
 }
 
-func (s *CampaignService) RecordUSDCSwapTotalAmount(ctx context.Context, senderAddress string, amount float64) (float64, error) {
+func (s *CampaignService) RecordUSDCSwapTotalAmount(ctx context.Context, eventID string, senderAddress string, amount float64) (float64, error) {
 	// find current share task
 	task, err := s.FindCurrentSharePoolTask(ctx)
 	if err != nil {
@@ -91,23 +92,14 @@ func (s *CampaignService) RecordUSDCSwapTotalAmount(ctx context.Context, senderA
 	}
 
 	key := fmt.Sprintf("%s_%d", task.Name, task.Period)
-	if err := s.redisHelper.HIncrFloat(ctx, key, senderAddress, amount); err != nil {
-		return 0, fmt.Errorf("failed to increment address swap amount: %w", err)
-	}
-
-	totalAmountStr, err := s.redisHelper.HGet(ctx, key, senderAddress)
-	if err != nil {
-		return 0, err
-	}
-
 	totalKey := fmt.Sprintf("%s_total", key)
-	if err := s.redisHelper.IncrFloat(ctx, totalKey, amount); err != nil {
-		return 0, fmt.Errorf("failed to increment total swap amount: %w", err)
+	totalAmount, recorded, err := s.redisHelper.RecordSwapVolumeOnce(ctx, eventID, key, totalKey, senderAddress, amount, swapEventDedupExpiration(task, time.Now().UTC()))
+	if err != nil {
+		return 0, fmt.Errorf("failed to record swap amount: %w", err)
 	}
 
-	totalAmount, err := strconv.ParseFloat(totalAmountStr, 64)
-	if err != nil {
-		return 0, err
+	if !recorded {
+		return 0, nil
 	}
 
 	// if amount is not enough
@@ -141,6 +133,19 @@ func (s *CampaignService) RecordUSDCSwapTotalAmount(ctx context.Context, senderA
 	}
 
 	return totalAmount, nil
+}
+
+func swapEventDedupExpiration(task *entities.Task, now time.Time) time.Duration {
+	if task == nil || task.EndAt == nil {
+		return processedSwapEventRetention
+	}
+
+	expiration := task.EndAt.Sub(now) + processedSwapEventRetention
+	if expiration < time.Second {
+		return time.Second
+	}
+
+	return expiration
 }
 
 func (s *CampaignService) createOnboardingTask(ctx context.Context) error {

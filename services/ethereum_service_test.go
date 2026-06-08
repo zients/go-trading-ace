@@ -82,7 +82,8 @@ func TestRetrieveEventData(t *testing.T) {
 			{},                                  // Event signature
 			common.HexToHash("0xSenderAddress"), // Sender Address (mocked)
 		},
-		Data: []byte{0x01, 0x02}, // Mock event data (this will be used by ABI unpacking)
+		Data:  []byte{0x01, 0x02}, // Mock event data (this will be used by ABI unpacking)
+		Index: 7,
 	}
 
 	// Create a mock SwapEvent struct (models.SwapEvent)
@@ -108,6 +109,7 @@ func TestRetrieveEventData(t *testing.T) {
 	assert.Equal(t, event.Amount0Out, expectedEvent.Amount0Out)
 	assert.Equal(t, event.Amount1Out, expectedEvent.Amount1Out)
 	assert.Equal(t, vLog.TxHash, event.TxHash)
+	assert.Equal(t, vLog.Index, event.LogIndex)
 
 	// Verify that UnpackIntoInterface was called with correct parameters
 	mockABI.AssertExpectations(t)
@@ -130,7 +132,8 @@ func TestProcessSwapEvent(t *testing.T) {
 
 	// Mock RecordUSDCSwapTotalAmount behavior
 	mockClient.On("TransactionByHash", sameContext(ctx), txHash).Return(signedTx, false, nil).Once()
-	mockCampaignService.On("RecordUSDCSwapTotalAmount", sameContext(ctx), transactionSender.Hex(), 0.00002).Return(100.0, nil).Once()
+	swapEventID := fmt.Sprintf("swap_event:%d:%s:%d", ethereumMainnetChainID, txHash.Hex(), uint(3))
+	mockCampaignService.On("RecordUSDCSwapTotalAmount", sameContext(ctx), swapEventID, transactionSender.Hex(), 0.00002).Return(100.0, nil).Once()
 
 	// Create EthereumService instance
 	e := &EthereumService{
@@ -141,6 +144,7 @@ func TestProcessSwapEvent(t *testing.T) {
 	event := &models.SwapEvent{
 		SenderAddress: "0xRouterAddress",
 		TxHash:        txHash,
+		LogIndex:      3,
 		Amount0In:     big.NewInt(10),
 		Amount0Out:    big.NewInt(10),
 		Amount1In:     big.NewInt(10),
@@ -170,7 +174,8 @@ func TestProcessSwapEventReturnsErrorWhenCampaignRecordingFails(t *testing.T) {
 
 	mockLogger.On("Info", mock.Anything).Return()
 	mockClient.On("TransactionByHash", mock.Anything, txHash).Return(signedTx, false, nil).Once()
-	mockCampaignService.On("RecordUSDCSwapTotalAmount", mock.Anything, transactionSender.Hex(), 0.00002).
+	swapEventID := fmt.Sprintf("swap_event:%d:%s:%d", ethereumMainnetChainID, txHash.Hex(), uint(4))
+	mockCampaignService.On("RecordUSDCSwapTotalAmount", mock.Anything, swapEventID, transactionSender.Hex(), 0.00002).
 		Return(0.0, fmt.Errorf("record failed")).Once()
 
 	e := &EthereumService{
@@ -181,6 +186,7 @@ func TestProcessSwapEventReturnsErrorWhenCampaignRecordingFails(t *testing.T) {
 	event := &models.SwapEvent{
 		SenderAddress: "0xRouterAddress",
 		TxHash:        txHash,
+		LogIndex:      4,
 		Amount0In:     big.NewInt(10),
 		Amount0Out:    big.NewInt(10),
 		Amount1In:     big.NewInt(10),
@@ -205,7 +211,8 @@ func TestProcessSwapEventRecordsTransactionSenderOnceWithCombinedUSDCAmount(t *t
 
 	mockLogger.On("Info", mock.Anything).Return()
 	mockClient.On("TransactionByHash", sameContext(ctx), txHash).Return(signedTx, false, nil).Once()
-	mockCampaignService.On("RecordUSDCSwapTotalAmount", sameContext(ctx), transactionSender.Hex(), 1000.0).
+	swapEventID := fmt.Sprintf("swap_event:%d:%s:%d", ethereumMainnetChainID, txHash.Hex(), uint(12))
+	mockCampaignService.On("RecordUSDCSwapTotalAmount", sameContext(ctx), swapEventID, transactionSender.Hex(), 1000.0).
 		Return(1000.0, nil).Once()
 
 	e := &EthereumService{
@@ -216,6 +223,7 @@ func TestProcessSwapEventRecordsTransactionSenderOnceWithCombinedUSDCAmount(t *t
 	event := &models.SwapEvent{
 		SenderAddress: "0x000000000000000000000000000000000000dEaD",
 		TxHash:        txHash,
+		LogIndex:      12,
 		Amount0In:     big.NewInt(250_000000),
 		Amount0Out:    big.NewInt(750_000000),
 		Amount1In:     big.NewInt(0),
@@ -256,7 +264,7 @@ func TestProcessSwapEventSkipsZeroUSDCAmount(t *testing.T) {
 	err := e.processSwapEvent(context.Background(), mockClient, event)
 
 	assert.NoError(t, err)
-	mockCampaignService.AssertNotCalled(t, "RecordUSDCSwapTotalAmount", mock.Anything, mock.Anything, mock.Anything)
+	mockCampaignService.AssertNotCalled(t, "RecordUSDCSwapTotalAmount", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	mockClient.AssertNotCalled(t, "TransactionByHash", mock.Anything, mock.Anything)
 	mockLogger.AssertExpectations(t)
 }
@@ -287,7 +295,7 @@ func TestProcessSwapEventReturnsErrorWhenTransactionIsMissing(t *testing.T) {
 	err := e.processSwapEvent(context.Background(), mockClient, event)
 
 	assert.ErrorContains(t, err, "swap transaction not found")
-	mockCampaignService.AssertNotCalled(t, "RecordUSDCSwapTotalAmount", mock.Anything, mock.Anything, mock.Anything)
+	mockCampaignService.AssertNotCalled(t, "RecordUSDCSwapTotalAmount", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	mockClient.AssertExpectations(t)
 	mockLogger.AssertExpectations(t)
 }
