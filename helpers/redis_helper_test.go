@@ -3,6 +3,8 @@ package helpers
 import (
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -163,6 +165,13 @@ func TestRedisHelper_HIncrFloat(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestRecordSwapVolumeOnceScriptIsEmbeddedFromLuaFile(t *testing.T) {
+	luaSource, err := os.ReadFile("lua/record_swap_volume_once.lua")
+
+	assert.NoError(t, err)
+	assert.Equal(t, strings.TrimSpace(string(luaSource)), strings.TrimSpace(recordSwapVolumeOnceLua))
+}
+
 func TestRedisHelper_RecordSwapVolumeOnceRecordsFirstEvent(t *testing.T) {
 	r, mock := setupRedisHelper()
 
@@ -173,8 +182,8 @@ func TestRedisHelper_RecordSwapVolumeOnceRecordsFirstEvent(t *testing.T) {
 	amount := 125.5
 	expiration := time.Hour
 
-	mock.ExpectEval(
-		recordSwapVolumeOnceScript,
+	mock.ExpectEvalSha(
+		recordSwapVolumeOnceScript.Hash(),
 		[]string{"test:" + eventKey, "test:" + volumeKey, "test:" + totalKey},
 		address,
 		amount,
@@ -199,8 +208,8 @@ func TestRedisHelper_RecordSwapVolumeOnceSkipsDuplicateEvent(t *testing.T) {
 	amount := 125.5
 	expiration := time.Hour
 
-	mock.ExpectEval(
-		recordSwapVolumeOnceScript,
+	mock.ExpectEvalSha(
+		recordSwapVolumeOnceScript.Hash(),
 		[]string{"test:" + eventKey, "test:" + volumeKey, "test:" + totalKey},
 		address,
 		amount,
@@ -225,8 +234,8 @@ func TestRedisHelper_RecordSwapVolumeOnceReturnsEvalError(t *testing.T) {
 	amount := 125.5
 	expiration := time.Hour
 
-	mock.ExpectEval(
-		recordSwapVolumeOnceScript,
+	mock.ExpectEvalSha(
+		recordSwapVolumeOnceScript.Hash(),
 		[]string{"test:" + eventKey, "test:" + volumeKey, "test:" + totalKey},
 		address,
 		amount,
