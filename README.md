@@ -22,14 +22,14 @@ Uniswap USDC/WETH Swap event
   -> Transaction sender lookup
   -> USDC amount extraction
   -> Campaign service
-  -> Redis volume accumulation
+  -> Redis atomic event deduplication and volume accumulation
   -> Hourly DB-driven settlement worker
   -> Reward calculation
   -> PostgreSQL task histories
   -> Campaign APIs
 ```
 
-Redis is used for fast-changing campaign state: per-period swap totals, per-user accumulated volume, current task cache, and leaderboard sorted sets.
+Redis is used for fast-changing campaign state: per-period swap totals, per-user accumulated volume, atomic swap event deduplication by `chain_id + tx_hash + log_index`, current task cache, and leaderboard sorted sets.
 
 PostgreSQL is used for durable campaign records: task definitions and completed task histories.
 
@@ -39,7 +39,7 @@ PostgreSQL is used for durable campaign records: task definitions and completed 
 - `services/ethereum_service.go`: Infura connection, Uniswap swap subscription, event parsing.
 - `services/campaign_service.go`: campaign initialization, volume tracking, reward calculation, leaderboard reads.
 - `repositories/`: PostgreSQL access for tasks and task histories.
-- `helpers/redis_helper.go`: Redis key/value, hash, and sorted set operations.
+- `helpers/redis_helper.go`: Redis key/value, hash, sorted set, and atomic swap volume operations.
 - `controllers/` and `routes/`: HTTP API surface.
 - `migrations/`: PostgreSQL schema setup.
 
@@ -161,7 +161,7 @@ Implemented:
 
 - Real Ethereum event subscription for the USDC/WETH Uniswap V2 pool.
 - Campaign task initialization.
-- Redis volume accumulation.
+- Redis-backed swap event deduplication and volume accumulation.
 - DB-driven share-pool settlement state and hourly settlement worker.
 - PostgreSQL task history persistence.
 - Leaderboard API backed by Redis sorted sets.
@@ -170,7 +170,7 @@ Implemented:
 Not production-ready yet:
 
 - Event listener reconnect/backoff behavior.
-- Historical backfill and event deduplication.
+- Historical backfill and durable processed-event audit storage.
 - Participant attribution uses transaction sender (`tx.from`); aggregators and smart contract wallets may require deeper trace-based attribution.
 - Automated database migrations during container startup.
 - Secrets management beyond local YAML configuration.
@@ -182,7 +182,7 @@ If this prototype were extended into a production service, the next steps would 
 
 1. Store last processed block and support historical backfill.
 2. Add reconnect/backoff handling for Ethereum subscriptions.
-3. Add event deduplication based on transaction hash and log index.
+3. Persist processed-event audit records and expose recovery tooling around backfill.
 4. Add settlement retry visibility, alerting, and operator controls.
 5. Automate migrations as part of deployment.
 6. Move secrets to environment variables or a secret manager.

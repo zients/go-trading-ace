@@ -512,21 +512,20 @@ func TestRecordUSDCSwapTotalAmount(t *testing.T) {
 		EndAt:     ptrTime(now.Add(time.Hour)),
 		Period:    1,
 	}
-	totalAmountStr := "100.0"
+	eventID := "swap_event:1:0xabc:1"
 	key := "SharePoolTask_1"
 
 	// Mock Redis responses
 	mockRedisHelper.On("Get", mock.Anything, "curr_shared_pool_task").Return("", errors.New("cache miss"))
 	mockRedisHelper.On("Set", mock.Anything, "curr_shared_pool_task", mock.Anything, mock.Anything).Return(nil)
-	mockRedisHelper.On("HIncrFloat", mock.Anything, key, senderAddress, amount).Return(nil)
-	mockRedisHelper.On("HGet", mock.Anything, key, senderAddress).Return(totalAmountStr, nil)
-	mockRedisHelper.On("IncrFloat", mock.Anything, key+"_total", amount).Return(nil)
+	mockRedisHelper.On("RecordSwapVolumeOnce", mock.Anything, eventID, key, key+"_total", senderAddress, amount, mock.Anything).
+		Return(amount, true, nil)
 
 	// Mock FindCurrentSharePoolTask response
 	mockTaskRepo.On("GetByName", mock.Anything, SharePoolTaskStr).Return([]*entities.Task{currentTask}, nil)
 
 	// Call the method under test
-	totalAmountReturned, err := campaignService.RecordUSDCSwapTotalAmount(context.Background(), senderAddress, amount)
+	totalAmountReturned, err := campaignService.RecordUSDCSwapTotalAmount(context.Background(), eventID, senderAddress, amount)
 
 	// Assert the results
 	assert.NoError(t, err)
@@ -538,7 +537,43 @@ func TestRecordUSDCSwapTotalAmount(t *testing.T) {
 	mockTaskHistoryRepo.AssertExpectations(t)
 }
 
-func TestRecordUSDCSwapTotalAmountReturnsErrorWhenUserAmountIncrementFails(t *testing.T) {
+func TestRecordUSDCSwapTotalAmountSkipsDuplicateSwapEvent(t *testing.T) {
+	mockRedisHelper := new(mocks.MockRedisHelper)
+	mockTaskRepo := new(mocks.MockTaskRepository)
+	mockTaskHistoryRepo := new(mocks.MockTaskHistoryRepository)
+
+	campaignService := &CampaignService{
+		redisHelper:     mockRedisHelper,
+		taskRepo:        mockTaskRepo,
+		taskHistoryRepo: mockTaskHistoryRepo,
+	}
+
+	now := time.Now()
+	currentTask := &entities.Task{
+		Name:      SharePoolTaskStr,
+		StartedAt: ptrTime(now.Add(-time.Hour)),
+		EndAt:     ptrTime(now.Add(time.Hour)),
+		Period:    1,
+	}
+	eventID := "swap_event:1:0xabc:1"
+	key := "SharePoolTask_1"
+
+	mockRedisHelper.On("Get", mock.Anything, "curr_shared_pool_task").Return("", errors.New("cache miss")).Once()
+	mockRedisHelper.On("Set", mock.Anything, "curr_shared_pool_task", mock.Anything, mock.Anything).Return(nil).Once()
+	mockTaskRepo.On("GetByName", mock.Anything, SharePoolTaskStr).Return([]*entities.Task{currentTask}, nil).Once()
+	mockRedisHelper.On("RecordSwapVolumeOnce", mock.Anything, eventID, key, key+"_total", "0x123", 100.0, mock.Anything).
+		Return(0.0, false, nil).Once()
+
+	totalAmount, err := campaignService.RecordUSDCSwapTotalAmount(context.Background(), eventID, "0x123", 100.0)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 0.0, totalAmount)
+	mockTaskHistoryRepo.AssertNotCalled(t, "FindByAddressAndTaskId", mock.Anything, mock.Anything, mock.Anything)
+	mockRedisHelper.AssertExpectations(t)
+	mockTaskRepo.AssertExpectations(t)
+}
+
+func TestRecordUSDCSwapTotalAmountReturnsErrorWhenSwapVolumeRecordFails(t *testing.T) {
 	mockRedisHelper := new(mocks.MockRedisHelper)
 	mockTaskRepo := new(mocks.MockTaskRepository)
 	mockTaskHistoryRepo := new(mocks.MockTaskHistoryRepository)
@@ -555,18 +590,18 @@ func TestRecordUSDCSwapTotalAmountReturnsErrorWhenUserAmountIncrementFails(t *te
 		StartedAt: &now,
 		EndAt:     ptrTime(now.Add(time.Hour)),
 	}
+	eventID := "swap_event:1:0xabc:1"
 	key := "SharePoolTask_1"
 
 	mockRedisHelper.On("Get", mock.Anything, "curr_shared_pool_task").Return("", errors.New("cache miss"))
 	mockTaskRepo.On("GetByName", mock.Anything, SharePoolTaskStr).Return([]*entities.Task{currentTask}, nil)
 	mockRedisHelper.On("Set", mock.Anything, "curr_shared_pool_task", mock.Anything, mock.Anything).Return(nil)
-	mockRedisHelper.On("HIncrFloat", mock.Anything, key, "0x123", 100.0).Return(errors.New("redis hincr failed"))
-	mockRedisHelper.On("HGet", mock.Anything, key, "0x123").Return("100", nil).Maybe()
-	mockRedisHelper.On("IncrFloat", mock.Anything, key+"_total", 100.0).Return(nil).Maybe()
+	mockRedisHelper.On("RecordSwapVolumeOnce", mock.Anything, eventID, key, key+"_total", "0x123", 100.0, mock.Anything).
+		Return(0.0, false, errors.New("redis record failed"))
 
-	_, err := campaignService.RecordUSDCSwapTotalAmount(context.Background(), "0x123", 100.0)
+	_, err := campaignService.RecordUSDCSwapTotalAmount(context.Background(), eventID, "0x123", 100.0)
 
-	assert.ErrorContains(t, err, "redis hincr failed")
+	assert.ErrorContains(t, err, "redis record failed")
 	mockRedisHelper.AssertExpectations(t)
 	mockTaskRepo.AssertExpectations(t)
 }
@@ -589,52 +624,19 @@ func TestRecordUSDCSwapTotalAmountPropagatesContextToDependencies(t *testing.T) 
 		StartedAt: &now,
 		EndAt:     ptrTime(now.Add(time.Hour)),
 	}
+	eventID := "swap_event:1:0xabc:1"
 	key := "SharePoolTask_1"
 
 	mockRedisHelper.On("Get", sameContext(ctx), "curr_shared_pool_task").Return("", errors.New("cache miss")).Once()
 	mockTaskRepo.On("GetByName", sameContext(ctx), SharePoolTaskStr).Return([]*entities.Task{currentTask}, nil).Once()
 	mockRedisHelper.On("Set", sameContext(ctx), "curr_shared_pool_task", mock.Anything, mock.Anything).Return(nil).Once()
-	mockRedisHelper.On("HIncrFloat", sameContext(ctx), key, "0x123", 100.0).Return(nil).Once()
-	mockRedisHelper.On("HGet", sameContext(ctx), key, "0x123").Return("100", nil).Once()
-	mockRedisHelper.On("IncrFloat", sameContext(ctx), key+"_total", 100.0).Return(nil).Once()
+	mockRedisHelper.On("RecordSwapVolumeOnce", sameContext(ctx), eventID, key, key+"_total", "0x123", 100.0, mock.Anything).
+		Return(100.0, true, nil).Once()
 
-	totalAmount, err := campaignService.RecordUSDCSwapTotalAmount(ctx, "0x123", 100.0)
+	totalAmount, err := campaignService.RecordUSDCSwapTotalAmount(ctx, eventID, "0x123", 100.0)
 
 	assert.NoError(t, err)
 	assert.Equal(t, 100.0, totalAmount)
-	mockRedisHelper.AssertExpectations(t)
-	mockTaskRepo.AssertExpectations(t)
-}
-
-func TestRecordUSDCSwapTotalAmountReturnsErrorWhenTotalAmountIncrementFails(t *testing.T) {
-	mockRedisHelper := new(mocks.MockRedisHelper)
-	mockTaskRepo := new(mocks.MockTaskRepository)
-	mockTaskHistoryRepo := new(mocks.MockTaskHistoryRepository)
-	campaignService := &CampaignService{
-		redisHelper:     mockRedisHelper,
-		taskRepo:        mockTaskRepo,
-		taskHistoryRepo: mockTaskHistoryRepo,
-	}
-
-	now := time.Now()
-	currentTask := &entities.Task{
-		Name:      SharePoolTaskStr,
-		Period:    1,
-		StartedAt: &now,
-		EndAt:     ptrTime(now.Add(time.Hour)),
-	}
-	key := "SharePoolTask_1"
-
-	mockRedisHelper.On("Get", mock.Anything, "curr_shared_pool_task").Return("", errors.New("cache miss"))
-	mockTaskRepo.On("GetByName", mock.Anything, SharePoolTaskStr).Return([]*entities.Task{currentTask}, nil)
-	mockRedisHelper.On("Set", mock.Anything, "curr_shared_pool_task", mock.Anything, mock.Anything).Return(nil)
-	mockRedisHelper.On("HIncrFloat", mock.Anything, key, "0x123", 100.0).Return(nil)
-	mockRedisHelper.On("HGet", mock.Anything, key, "0x123").Return("100", nil)
-	mockRedisHelper.On("IncrFloat", mock.Anything, key+"_total", 100.0).Return(errors.New("redis incr failed"))
-
-	_, err := campaignService.RecordUSDCSwapTotalAmount(context.Background(), "0x123", 100.0)
-
-	assert.ErrorContains(t, err, "redis incr failed")
 	mockRedisHelper.AssertExpectations(t)
 	mockTaskRepo.AssertExpectations(t)
 }
@@ -656,6 +658,7 @@ func TestRecordUSDCSwapTotalAmountReturnsErrorWhenOnboardingHistoryCreateFails(t
 		StartedAt: &now,
 		EndAt:     ptrTime(now.Add(time.Hour)),
 	}
+	eventID := "swap_event:1:0xabc:1"
 	onboardingTask := &entities.Task{
 		ID:    10,
 		Name:  OnboardingTaskStr,
@@ -666,16 +669,15 @@ func TestRecordUSDCSwapTotalAmountReturnsErrorWhenOnboardingHistoryCreateFails(t
 	mockRedisHelper.On("Get", mock.Anything, "curr_shared_pool_task").Return("", errors.New("cache miss"))
 	mockTaskRepo.On("GetByName", mock.Anything, SharePoolTaskStr).Return([]*entities.Task{currentTask}, nil)
 	mockRedisHelper.On("Set", mock.Anything, "curr_shared_pool_task", mock.Anything, mock.Anything).Return(nil)
-	mockRedisHelper.On("HIncrFloat", mock.Anything, key, "0x123", 1000.0).Return(nil)
-	mockRedisHelper.On("HGet", mock.Anything, key, "0x123").Return("1000", nil)
-	mockRedisHelper.On("IncrFloat", mock.Anything, key+"_total", 1000.0).Return(nil)
+	mockRedisHelper.On("RecordSwapVolumeOnce", mock.Anything, eventID, key, key+"_total", "0x123", 1000.0, mock.Anything).
+		Return(1000.0, true, nil)
 	mockRedisHelper.On("Get", mock.Anything, "onboarding_task").Return("", errors.New("cache miss"))
 	mockTaskRepo.On("FindByName", mock.Anything, OnboardingTaskStr).Return(onboardingTask, nil)
 	mockRedisHelper.On("Set", mock.Anything, "onboarding_task", mock.Anything, mock.Anything).Return(nil)
 	mockTaskHistoryRepo.On("FindByAddressAndTaskId", mock.Anything, "0x123", onboardingTask.ID).Return(nil, errors.New("not found"))
 	mockTaskHistoryRepo.On("Create", mock.Anything, mock.Anything).Return(&entities.TaskHistory{}, errors.New("db create failed"))
 
-	_, err := campaignService.RecordUSDCSwapTotalAmount(context.Background(), "0x123", 1000.0)
+	_, err := campaignService.RecordUSDCSwapTotalAmount(context.Background(), eventID, "0x123", 1000.0)
 
 	assert.ErrorContains(t, err, "db create failed")
 	mockRedisHelper.AssertExpectations(t)

@@ -22,8 +22,8 @@ func (m *MockCampaignService) GetPointHistories(ctx context.Context, address str
 	return args.Get(0).([]*models.TaskTaskHistoryPair), args.Error(1)
 }
 
-func (m *MockCampaignService) RecordUSDCSwapTotalAmount(ctx context.Context, senderAddress string, amount float64) (float64, error) {
-	args := m.Called(ctx, senderAddress, amount)
+func (m *MockCampaignService) RecordUSDCSwapTotalAmount(ctx context.Context, eventID string, senderAddress string, amount float64) (float64, error) {
+	args := m.Called(ctx, eventID, senderAddress, amount)
 	return args.Get(0).(float64), args.Error(1)
 }
 

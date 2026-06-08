@@ -53,6 +53,11 @@ func (m *MockRedisHelper) HIncrFloat(ctx context.Context, key string, field stri
 	return args.Error(0)
 }
 
+func (m *MockRedisHelper) RecordSwapVolumeOnce(ctx context.Context, eventKey string, volumeKey string, totalKey string, address string, amount float64, expiration time.Duration) (float64, bool, error) {
+	args := m.Called(ctx, eventKey, volumeKey, totalKey, address, amount, expiration)
+	return args.Get(0).(float64), args.Bool(1), args.Error(2)
+}
+
 func (m *MockRedisHelper) ZAdd(ctx context.Context, key string, members ...*redis.Z) error {
 	args := m.Called(ctx, key, members)
 	return args.Error(0)
