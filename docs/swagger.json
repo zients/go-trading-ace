@@ -4,6 +4,46 @@
         "contact": {}
     },
     "paths": {
+        "/campaign/histories/{address}": {
+            "get": {
+                "description": "Retrieves the list of point histories for a given address.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Campaign"
+                ],
+                "summary": "Get point histories",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User Address",
+                        "name": "address",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/campaign/leaderboard/{taskName}/{period}": {
             "get": {
                 "description": "Retrieves the leaderboard for a specific task and period.",
@@ -29,46 +69,6 @@
                         "type": "integer",
                         "description": "Period",
                         "name": "period",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/campaign/points/{address}": {
-            "get": {
-                "description": "Retrieves the list of point histories for a given address.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Campaign"
-                ],
-                "summary": "Get point histories",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User Address",
-                        "name": "address",
                         "in": "path",
                         "required": true
                     }
@@ -122,7 +122,7 @@
                 }
             }
         },
-        "/campaign/task-status/{address}": {
+        "/campaign/tasks/{address}": {
             "get": {
                 "description": "Retrieves the task status for a given address.",
                 "consumes": [

@@ -103,7 +103,7 @@ func TestStartCampaign(t *testing.T) {
 	taskRepoMock.On("Create", mock.Anything).Return(&entities.Task{}, nil)
 
 	// 模擬 share pool task 的行為
-	taskRepoMock.On("IsExistedByName", SharePoolTaskStr).Return(false, nil)
+	taskRepoMock.On("GetByName", SharePoolTaskStr).Return([]*entities.Task{}, nil)
 	taskRepoMock.On("Create", mock.Anything).Return(&entities.Task{}, nil)
 
 	// 模擬 logger 的行為
@@ -121,11 +121,96 @@ func TestStartCampaign(t *testing.T) {
 	taskRepoMock.AssertCalled(t, "Create", mock.Anything)
 
 	// 驗證 createSharePoolTask 是否被調用
-	taskRepoMock.AssertCalled(t, "IsExistedByName", SharePoolTaskStr)
+	taskRepoMock.AssertCalled(t, "GetByName", SharePoolTaskStr)
 	taskRepoMock.AssertCalled(t, "Create", mock.Anything)
 
 	// 驗證 logger 是否有記錄啟動計劃
 	loggerMock.AssertCalled(t, "Info", mock.Anything)
+}
+
+func TestStartCampaignReturnsNoErrorWhenCampaignTasksAlreadyExist(t *testing.T) {
+	cfg := &config.Config{}
+	loggerMock := &mocks.MockLogger{}
+	taskHistoryRepoMock := &mocks.MockTaskHistoryRepository{}
+	taskRepoMock := &mocks.MockTaskRepository{}
+	redisHelperMock := &mocks.MockRedisHelper{}
+
+	existingSharePoolTasks := []*entities.Task{
+		{Name: SharePoolTaskStr, Period: 1},
+		{Name: SharePoolTaskStr, Period: 2},
+		{Name: SharePoolTaskStr, Period: 3},
+		{Name: SharePoolTaskStr, Period: 4},
+	}
+
+	taskRepoMock.On("IsExistedByName", OnboardingTaskStr).Return(true, nil).Once()
+	taskRepoMock.On("GetByName", SharePoolTaskStr).Return(existingSharePoolTasks, nil).Once()
+	loggerMock.On("Info", mock.Anything).Return().Once()
+
+	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock)
+	err := svc.StartCampaign()
+
+	assert.NoError(t, err)
+	taskRepoMock.AssertNotCalled(t, "Create", mock.Anything)
+	taskRepoMock.AssertExpectations(t)
+	loggerMock.AssertExpectations(t)
+}
+
+func TestStartCampaignReturnsErrorWhenExistingSharePoolTasksAreIncomplete(t *testing.T) {
+	cfg := &config.Config{}
+	loggerMock := &mocks.MockLogger{}
+	taskHistoryRepoMock := &mocks.MockTaskHistoryRepository{}
+	taskRepoMock := &mocks.MockTaskRepository{}
+	redisHelperMock := &mocks.MockRedisHelper{}
+
+	incompleteSharePoolTasks := []*entities.Task{
+		{Name: SharePoolTaskStr, Period: 1},
+		{Name: SharePoolTaskStr, Period: 2},
+	}
+
+	taskRepoMock.On("IsExistedByName", OnboardingTaskStr).Return(true, nil).Once()
+	taskRepoMock.On("GetByName", SharePoolTaskStr).Return(incompleteSharePoolTasks, nil).Once()
+
+	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock)
+	err := svc.StartCampaign()
+
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "expected 4 share pool tasks")
+	taskRepoMock.AssertNotCalled(t, "Create", mock.Anything)
+	taskRepoMock.AssertExpectations(t)
+	loggerMock.AssertExpectations(t)
+}
+
+func TestStartCampaignDoesNotStartDuplicateScheduler(t *testing.T) {
+	cfg := &config.Config{}
+	loggerMock := &mocks.MockLogger{}
+	taskHistoryRepoMock := &mocks.MockTaskHistoryRepository{}
+	taskRepoMock := &mocks.MockTaskRepository{}
+	redisHelperMock := &mocks.MockRedisHelper{}
+
+	existingSharePoolTasks := []*entities.Task{
+		{Name: SharePoolTaskStr, Period: 1},
+		{Name: SharePoolTaskStr, Period: 2},
+		{Name: SharePoolTaskStr, Period: 3},
+		{Name: SharePoolTaskStr, Period: 4},
+	}
+
+	taskRepoMock.On("IsExistedByName", OnboardingTaskStr).Return(false, nil).Once()
+	taskRepoMock.On("Create", mock.Anything).Return(&entities.Task{}, nil).Times(5)
+	taskRepoMock.On("GetByName", SharePoolTaskStr).Return([]*entities.Task{}, nil).Once()
+	loggerMock.On("Info", mock.Anything).Return().Once()
+
+	taskRepoMock.On("IsExistedByName", OnboardingTaskStr).Return(true, nil).Once()
+	taskRepoMock.On("GetByName", SharePoolTaskStr).Return(existingSharePoolTasks, nil).Once()
+
+	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock)
+
+	assert.NoError(t, svc.StartCampaign())
+	assert.NoError(t, svc.StartCampaign())
+
+	taskRepoMock.AssertNumberOfCalls(t, "Create", 5)
+	loggerMock.AssertNumberOfCalls(t, "Info", 1)
+	taskRepoMock.AssertExpectations(t)
+	loggerMock.AssertExpectations(t)
 }
 
 func TestFindCurrentSharePoolTask(t *testing.T) {

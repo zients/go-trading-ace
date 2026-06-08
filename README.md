@@ -1,130 +1,187 @@
 # Go Trading Ace
 
-## Introduction
-Welcome to Go Trading Ace – a Go-based platform that I built to interact with decentralized finance (DeFi) protocols. The goal of this project is to leverage Go to fetch data from the Uniswap smart contracts and create a point-based rewards system for liquidity providers, turning liquidity provision into an engaging incentive activity.
+Go Trading Ace is a DeFi rewards backend prototype built from scratch in November 2024 as a one-week take-home assignment. It demonstrates a Go service that listens to Uniswap USDC/WETH swap events, accumulates user trading volume, calculates campaign rewards, and exposes point history, task status, and leaderboard APIs.
 
-In this system, I extract data from Uniswap’s smart contracts, focusing on liquidity pools and trading volumes. Based on the liquidity provided by users, I calculate rewards and structure them into a "share pool" system. Users earn points for their participation, which are stored and tracked, creating a dynamic incentive system to encourage liquidity provision.
+This repository is positioned as a portfolio prototype. It focuses on showing the core backend flow for an on-chain trading rewards campaign, not on claiming production readiness.
 
-Key Features:
-- Uniswap Integration: The system interacts with Uniswap's Ethereum-based smart contracts to fetch real-time data on liquidity pools and trading volumes.
-- Share Pool Rewards: A point-based reward system where users earn points based on the liquidity they provide. These points are recorded in a decentralized ledger for transparency.
-- Leaderboard System: Users can see where they rank on the leaderboard, showcasing the top contributors to liquidity pools based on their accumulated rewards.
+## What It Demonstrates
 
-With Go Trading Ace, I’ve built a platform where developers and DeFi enthusiasts can easily integrate Uniswap data into their applications, develop liquidity incentives, and create engaging user experiences that promote participation in DeFi protocols.
+- Go backend development with Gin and Fx dependency injection.
+- Ethereum log subscription with go-ethereum and Infura WebSocket RPC.
+- Uniswap V2 `Swap` event parsing for the USDC/WETH pool.
+- Redis-backed volume accumulation and leaderboard storage.
+- PostgreSQL persistence for campaign tasks and completed task histories.
+- Docker Compose local infrastructure.
+- Swagger API documentation and GitHub Actions CI.
 
-## Getting Started
+## Architecture Flow
 
-These instructions will help you set up the project on your local machine for development and testing purposes.
-
-### Prerequisites
-
-Before getting started, ensure that you have the following software installed on your machine:
-
-- **Go** (recommended version 1.18 or higher). You can download Go from [Go's official website](https://golang.org/dl/).
-- **Docker** and **Docker Compose** for running the application in containers. You can download these from:
-  - [Docker](https://www.docker.com/get-started)
-  - [Docker Compose](https://docs.docker.com/compose/install/)
-- **migrate** (for handling database migrations). You can install it using:
-  ```
-  brew install golang-migrate
-  ```
-
-  or you can manually install it:
-  ```
-  curl -sSfL https://github.com/golang-migrate/migrate/releases/download/v4.15.2/migrate.linux-amd64.tar.gz | tar xz
-  sudo mv migrate /usr/local/bin
-  ```
-- **Infura Key**
-  You can get Infura key from [Infura](https://www.infura.io/).
-
-### Installing and Running the Project
-
-1. Clone the Repository First, clone the repository to your local machine.
-    ```
-    git clone https://github.com/tsen1220/go-trading-ace.git
-    ```
-2. Configure the database, Redis, infura key to connect ethereum using `/config/config.yml`. And here is example key.
-    ```
-    database:
-      host: "postgres"
-      user: "root"
-      password: "root"
-      port: 5432
-      name: "trading-ace"
-      sslmode: "disable"
-
-    redis:
-      prefix: "trading-ace:"
-      host: "redis"
-      port: 6379
-    
-    infura:
-      key: "<your-infura-project-id>"
-    ```
-3. Build and Run with Docker Compose
-    ```
-    docker-compose up --build
-    ```
-4. Run the Project Locally (Without Docker)  
-   If you prefer to run the project locally, follow these steps:  
-
-   - Download the necessary dependencies:  
-     ```bash
-     go mod tidy
-     ```  
-
-   - Run the application:  
-     ```bash
-     go run main.go
-     ```
-
-### Database Migration
-
-1. **Configure Database Connection**
-   
-    Ensure that your database connection details are correctly set in the config.yml file or your environment variables.
-2. **Run Migrations**
-    Run the database migrations to set up the schema in the database:
-    ```
-    migrate -path=migrations -database "postgres://root:root@localhost:5432/trading-ace?sslmode=disable" up
-    ```
-3. **Rollback Migrations**
-    If you need to rollback the migrations, you can use:
-    ```
-    migrate -path=migrations -database "postgres://root:root@localhost:5432/trading-ace?sslmode=disable" down
-    ```
-
-### Running Tests
-To run the tests for the project, execute the following command:
-```
-go test ./...
+```text
+Uniswap USDC/WETH Swap event
+  -> Ethereum listener
+  -> USDC amount extraction
+  -> Campaign service
+  -> Redis volume accumulation
+  -> Reward calculation
+  -> PostgreSQL task histories
+  -> Campaign APIs
 ```
 
-If you want to get coverage info:
-```
-go test ./... -cover
+Redis is used for fast-changing campaign state: per-period swap totals, per-user accumulated volume, current task cache, and leaderboard sorted sets.
+
+PostgreSQL is used for durable campaign records: task definitions and completed task histories.
+
+## Main Components
+
+- `main.go`: application wiring, database/Redis setup, Gin server startup.
+- `services/ethereum_service.go`: Infura connection, Uniswap swap subscription, event parsing.
+- `services/campaign_service.go`: campaign initialization, volume tracking, reward calculation, leaderboard reads.
+- `repositories/`: PostgreSQL access for tasks and task histories.
+- `helpers/redis_helper.go`: Redis key/value, hash, and sorted set operations.
+- `controllers/` and `routes/`: HTTP API surface.
+- `migrations/`: PostgreSQL schema setup.
+
+## API Surface
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | Health/demo response |
+| `GET` | `/campaign/start` | Initialize campaign tasks |
+| `GET` | `/campaign/histories/:address` | Get point history for an address |
+| `GET` | `/campaign/tasks/:address` | Get onboarding/share-pool task status for an address |
+| `GET` | `/campaign/leaderboard/:taskName/:period` | Get leaderboard entries for a task period |
+| `GET` | `/swagger/index.html` | Swagger UI |
+
+## Requirements
+
+- Go toolchain `1.26.4`
+- Docker and Docker Compose
+- `golang-migrate`
+- Infura project ID for Ethereum mainnet WebSocket access
+
+Install `golang-migrate` on macOS:
+
+```bash
+brew install golang-migrate
 ```
 
-### Swagger API Docs
+## Configuration
 
-You can view the API documentation from the following URL:
+The application reads configuration from `config/config.yml`.
 
+Example local Docker configuration:
+
+```yaml
+server:
+  port: 8080
+
+database:
+  host: "postgres"
+  user: "root"
+  password: "root"
+  port: 5432
+  name: "trading-ace"
+  sslmode: "disable"
+
+redis:
+  prefix: "trading-ace:"
+  host: "redis"
+  port: 6379
+
+infura:
+  key: "<your-infura-project-id>"
 ```
+
+## Run Locally With Docker Compose
+
+Clone the repository:
+
+```bash
+git clone https://github.com/zients/go-trading-ace.git
+cd go-trading-ace
+```
+
+Start PostgreSQL, Redis, and the app:
+
+```bash
+docker compose up --build
+```
+
+Run database migrations from another terminal:
+
+```bash
+migrate -path=migrations \
+  -database "postgres://root:root@localhost:5432/trading-ace?sslmode=disable" \
+  up
+```
+
+Open Swagger UI:
+
+```text
 http://localhost:8080/swagger/index.html
 ```
 
-This will open the interactive Swagger UI, allowing you to explore and test the API endpoints.
+## Run Without Docker
 
-If you want to update the Swagger documentation, follow these steps:
+For local execution outside Docker, update `config/config.yml` so PostgreSQL and Redis point to reachable local services, then run:
 
-1. Install the latest version of the swag tool:
-
+```bash
+go mod download
+go run main.go
 ```
-go install github.com/swaggo/swag/cmd/swag@latest
+
+## Tests
+
+Run the test suite:
+
+```bash
+go test ./...
 ```
 
-2. Generate or update the Swagger documentation:
+Run coverage:
 
+```bash
+go test ./... -cover
 ```
-swag init
+
+Run vulnerability analysis:
+
+```bash
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 ```
+
+## Prototype Scope
+
+This project was intentionally scoped as a one-week prototype. It demonstrates the core data flow, but it does not include every production hardening concern.
+
+Implemented:
+
+- Real Ethereum event subscription for the USDC/WETH Uniswap V2 pool.
+- Campaign task initialization.
+- Redis volume accumulation.
+- PostgreSQL task history persistence.
+- Leaderboard API backed by Redis sorted sets.
+- Dockerized local services and CI tests.
+
+Not production-ready yet:
+
+- Event listener reconnect/backoff behavior.
+- Historical backfill and event deduplication.
+- Durable settlement worker state.
+- Multi-instance locking for reward settlement.
+- Automated database migrations during container startup.
+- Secrets management beyond local YAML configuration.
+- Multi-pool or multi-campaign configuration.
+
+## Production Hardening Roadmap
+
+If this prototype were extended into a production service, the next steps would be:
+
+1. Replace the in-memory weekly ticker with a DB-driven settlement worker.
+2. Track settlement status per task period to prevent duplicate reward distribution.
+3. Store last processed block and support historical backfill.
+4. Add reconnect/backoff handling for Ethereum subscriptions.
+5. Add event deduplication based on transaction hash and log index.
+6. Automate migrations as part of deployment.
+7. Move secrets to environment variables or a secret manager.
+8. Add integration tests covering API, PostgreSQL, and Redis together.

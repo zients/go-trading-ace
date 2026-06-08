@@ -55,7 +55,7 @@ func (h *CampaignController) StartCampaign(ctx *gin.Context) {
 // @Param address path string true "User Address"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /campaign/points/{address} [get]
+// @Router /campaign/histories/{address} [get]
 func (h *CampaignController) GetPointHistories(ctx *gin.Context) {
 	address := ctx.Param("address")
 
@@ -87,7 +87,7 @@ func (h *CampaignController) GetPointHistories(ctx *gin.Context) {
 // @Param address path string true "User Address"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /campaign/task-status/{address} [get]
+// @Router /campaign/tasks/{address} [get]
 func (h *CampaignController) GetTaskStatus(ctx *gin.Context) {
 	address := ctx.Param("address")
 
