@@ -94,14 +94,19 @@ func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount
 	}
 
 	key := fmt.Sprintf("%s_%d", task.Name, task.Period)
-	s.redisHelper.HIncrFloat(key, senderAddress, amount)
+	if err := s.redisHelper.HIncrFloat(key, senderAddress, amount); err != nil {
+		return 0, fmt.Errorf("failed to increment address swap amount: %w", err)
+	}
+
 	totalAmountStr, err := s.redisHelper.HGet(key, senderAddress)
 	if err != nil {
 		return 0, err
 	}
 
 	totalKey := fmt.Sprintf("%s_total", key)
-	s.redisHelper.IncrFloat(totalKey, amount)
+	if err := s.redisHelper.IncrFloat(totalKey, amount); err != nil {
+		return 0, fmt.Errorf("failed to increment total swap amount: %w", err)
+	}
 
 	totalAmount, err := strconv.ParseFloat(totalAmountStr, 64)
 	if err != nil {
@@ -134,7 +139,9 @@ func (s *CampaignService) RecordUSDCSwapTotalAmount(senderAddress string, amount
 		CompletedAt:  &now,
 	}
 
-	s.taskHistoryRepo.Create(taskHistory)
+	if _, err := s.taskHistoryRepo.Create(taskHistory); err != nil {
+		return 0, fmt.Errorf("failed to create onboarding task history: %w", err)
+	}
 
 	return totalAmount, nil
 }

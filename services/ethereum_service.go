@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -207,19 +208,34 @@ func (e *EthereumService) processSwapEvent(event *models.SwapEvent) error {
 	amountOutUSDCFloat64, _ := amountOutUSDC.Float64()
 
 	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
-		e.campaignService.RecordUSDCSwapTotalAmount(event.SenderAddress, amountInUSDCFloat64)
+		_, err := e.campaignService.RecordUSDCSwapTotalAmount(event.SenderAddress, amountInUSDCFloat64)
+		errCh <- err
 	}()
 
 	go func() {
 		defer wg.Done()
-		e.campaignService.RecordUSDCSwapTotalAmount(event.SenderAddress, amountOutUSDCFloat64)
+		_, err := e.campaignService.RecordUSDCSwapTotalAmount(event.SenderAddress, amountOutUSDCFloat64)
+		errCh <- err
 	}()
 
 	wg.Wait()
+	close(errCh)
+
+	var recordErrors []error
+	for err := range errCh {
+		if err != nil {
+			recordErrors = append(recordErrors, err)
+		}
+	}
+
+	if err := errors.Join(recordErrors...); err != nil {
+		return fmt.Errorf("failed to record swap event campaign data: %w", err)
+	}
 
 	return nil
 }

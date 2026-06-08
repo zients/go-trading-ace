@@ -129,3 +129,31 @@ func TestProcessSwapEvent(t *testing.T) {
 	// Additional assertions for verifying specific behaviors
 	mockCampaignService.AssertCalled(t, "RecordUSDCSwapTotalAmount", "0xSenderAddress", mock.Anything)
 }
+
+func TestProcessSwapEventReturnsErrorWhenCampaignRecordingFails(t *testing.T) {
+	mockLogger := new(mocks.MockLogger)
+	mockCampaignService := new(mocks.MockCampaignService)
+
+	mockLogger.On("Info", mock.Anything).Return()
+	mockCampaignService.On("RecordUSDCSwapTotalAmount", "0xSenderAddress", mock.Anything).
+		Return(0.0, fmt.Errorf("record failed"))
+
+	e := &EthereumService{
+		logger:          mockLogger,
+		campaignService: mockCampaignService,
+	}
+
+	event := &models.SwapEvent{
+		SenderAddress: "0xSenderAddress",
+		Amount0In:     big.NewInt(10),
+		Amount0Out:    big.NewInt(10),
+		Amount1In:     big.NewInt(10),
+		Amount1Out:    big.NewInt(10),
+	}
+
+	err := e.processSwapEvent(event)
+
+	assert.ErrorContains(t, err, "record failed")
+	mockLogger.AssertExpectations(t)
+	mockCampaignService.AssertExpectations(t)
+}

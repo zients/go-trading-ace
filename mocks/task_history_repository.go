@@ -13,20 +13,29 @@ type MockTaskHistoryRepository struct {
 
 func (m *MockTaskHistoryRepository) Create(taskHistory *entities.TaskHistory) (*entities.TaskHistory, error) {
 	args := m.Called(taskHistory)
-	return args.Get(0).(*entities.TaskHistory), args.Error(1)
+	return getTaskHistory(args, 0), args.Error(1)
 }
 
 func (m *MockTaskHistoryRepository) FindByID(id int64) (*entities.TaskHistory, error) {
 	args := m.Called(id)
-	return args.Get(0).(*entities.TaskHistory), args.Error(1)
+	return getTaskHistory(args, 0), args.Error(1)
 }
 
 func (m *MockTaskHistoryRepository) FindByAddressAndTaskId(address string, taskId int64) (*entities.TaskHistory, error) {
 	args := m.Called(address, taskId)
-	return args.Get(0).(*entities.TaskHistory), args.Error(1)
+	return getTaskHistory(args, 0), args.Error(1)
 }
 
 func (m *MockTaskHistoryRepository) GetByAddressIncludingTasks(address string) ([]*models.TaskTaskHistoryPair, error) {
 	args := m.Called(address)
 	return args.Get(0).([]*models.TaskTaskHistoryPair), args.Error(1)
+}
+
+func getTaskHistory(args mock.Arguments, index int) *entities.TaskHistory {
+	value := args.Get(index)
+	if value == nil {
+		return nil
+	}
+
+	return value.(*entities.TaskHistory)
 }
