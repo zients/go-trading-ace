@@ -46,3 +46,8 @@ func (m *MockCampaignService) GetLeaderboard(ctx context.Context, taskName strin
 	args := m.Called(ctx, taskName, period)
 	return args.Get(0).([]models.LeaderboardEntry), args.Error(1)
 }
+
+func (m *MockCampaignService) SettleDueSharePoolTasks(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}

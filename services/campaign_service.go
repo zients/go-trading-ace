@@ -3,10 +3,10 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
 	"trading-ace/config"
 	"trading-ace/entities"
@@ -26,17 +26,15 @@ type ICampaignService interface {
 	FindOnboardingTask(ctx context.Context) (*entities.Task, error)
 	FindCurrentSharePoolTask(ctx context.Context) (*entities.Task, error)
 	GetLeaderboard(ctx context.Context, taskName string, period int) ([]models.LeaderboardEntry, error)
+	SettleDueSharePoolTasks(ctx context.Context) error
 }
 
 type CampaignService struct {
-	config           *config.Config
-	logger           logger.ILogger
-	taskHistoryRepo  repositories.ITaskHistoryRepository
-	taskRepo         repositories.ITaskRepository
-	redisHelper      helpers.IRedisHelper
-	schedulerMu      sync.Mutex
-	schedulerStarted bool
-	workerCtx        context.Context
+	config          *config.Config
+	logger          logger.ILogger
+	taskHistoryRepo repositories.ITaskHistoryRepository
+	taskRepo        repositories.ITaskRepository
+	redisHelper     helpers.IRedisHelper
 }
 
 const OnboardingTaskStr string = "OnboardingTask"
@@ -55,7 +53,6 @@ func NewCampaignService(
 	taskHistoryRepo repositories.ITaskHistoryRepository,
 	taskRepo repositories.ITaskRepository,
 	redisHelper helpers.IRedisHelper,
-	workerCtx context.Context,
 ) ICampaignService {
 	return &CampaignService{
 		config:          config,
@@ -63,7 +60,6 @@ func NewCampaignService(
 		taskHistoryRepo: taskHistoryRepo,
 		taskRepo:        taskRepo,
 		redisHelper:     redisHelper,
-		workerCtx:       workerCtx,
 	}
 }
 
@@ -72,12 +68,9 @@ func (s *CampaignService) StartCampaign(ctx context.Context) error {
 		return err
 	}
 
-	shareTasks, err := s.createSharePoolTask(ctx)
-	if err != nil {
+	if _, err := s.createSharePoolTask(ctx); err != nil {
 		return err
 	}
-
-	s.startLimitedWeeklySettlementScheduler(shareTasks)
 
 	return nil
 }
@@ -333,44 +326,6 @@ func (s *CampaignService) cacheTask(ctx context.Context, key string, task *entit
 	return nil
 }
 
-func (s *CampaignService) startLimitedWeeklySettlementScheduler(tasks []*entities.Task) {
-	s.schedulerMu.Lock()
-	if s.schedulerStarted {
-		s.schedulerMu.Unlock()
-		return
-	}
-	s.schedulerStarted = true
-	s.schedulerMu.Unlock()
-
-	ticker := time.NewTicker(7 * 24 * time.Hour)
-	maxRuns := 4
-	runCount := 0
-
-	go func() {
-		defer ticker.Stop()
-		for {
-			select {
-			case <-s.workerCtx.Done():
-				s.logger.Info("Weekly settlement scheduler stopped: %v", s.workerCtx.Err())
-				return
-			case <-ticker.C:
-				if runCount >= maxRuns {
-					s.logger.Info("Weekly settlement scheduler reached its limit, stopping...")
-					return
-				}
-
-				if err := s.calculateSharePoolPoint(s.workerCtx, tasks[runCount]); err != nil {
-					s.logger.Error("Failed to perform weekly settlement: %v", err)
-				}
-
-				runCount++
-			}
-		}
-	}()
-
-	s.logger.Info("Limited weekly settlement scheduler started")
-}
-
 func (s *CampaignService) calculateSharePoolPoint(ctx context.Context, task *entities.Task) error {
 	if task.Name != SharePoolTaskStr {
 		return fmt.Errorf("task is not shard pool task")
@@ -379,24 +334,31 @@ func (s *CampaignService) calculateSharePoolPoint(ctx context.Context, task *ent
 	key := fmt.Sprintf("%s_%d", task.Name, task.Period)
 	totalKey := fmt.Sprintf("%s_total", key)
 
-	totalStr, err := s.redisHelper.Get(ctx, totalKey)
-	if err != nil {
-		return err
-	}
-
-	totalAmount, err := strconv.ParseFloat(totalStr, 64)
-	if err != nil {
-		return fmt.Errorf("failed to parse total amount from key %s: %w", totalKey, err)
-	}
-
 	swapAmountMap, err := s.redisHelper.HGetAll(ctx, key)
 	if err != nil {
 		return err
 	}
 
+	if len(swapAmountMap) == 0 {
+		return nil
+	}
+
+	totalStr, err := s.redisHelper.Get(ctx, totalKey)
+	if err != nil {
+		return err
+	}
+	totalAmount, err := strconv.ParseFloat(totalStr, 64)
+	if err != nil {
+		return fmt.Errorf("failed to parse total amount from key %s: %w", totalKey, err)
+	}
+	if totalAmount <= 0 {
+		return fmt.Errorf("total amount for key %s must be greater than zero", totalKey)
+	}
+
 	taskPoints := task.Points
 
 	now := time.Now().UTC()
+	var settlementErrors []error
 	for address, v := range swapAmountMap {
 		amount, err := strconv.ParseFloat(v, 64)
 		if err != nil {
@@ -416,15 +378,60 @@ func (s *CampaignService) calculateSharePoolPoint(ctx context.Context, task *ent
 			UpdatedAt:    now,
 		}
 
-		if _, err := s.taskHistoryRepo.Create(ctx, history); err != nil {
-			s.logger.Error("create history failed for address %s, %v", address, err)
+		if _, err := s.taskHistoryRepo.Upsert(ctx, history); err != nil {
+			settlementErrors = append(settlementErrors, fmt.Errorf("upsert history failed for address %s: %w", address, err))
 			continue
 		}
 
-		s.redisHelper.ZAdd(ctx, fmt.Sprintf("%s_rank", key), &redis.Z{Score: rewards, Member: address})
+		if err := s.redisHelper.ZAdd(ctx, fmt.Sprintf("%s_rank", key), &redis.Z{Score: rewards, Member: address}); err != nil {
+			settlementErrors = append(settlementErrors, fmt.Errorf("update leaderboard failed for address %s: %w", address, err))
+		}
+	}
+
+	if err := errors.Join(settlementErrors...); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func (s *CampaignService) SettleDueSharePoolTasks(ctx context.Context) error {
+	for {
+		task, err := s.taskRepo.ClaimDueSharePoolTask(ctx, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		if task == nil {
+			return nil
+		}
+
+		if task.SettlementStartedAt == nil {
+			return fmt.Errorf("claimed share pool task %d is missing settlement_started_at", task.ID)
+		}
+		claimStartedAt := *task.SettlementStartedAt
+
+		if err := s.calculateSharePoolPoint(ctx, task); err != nil {
+			if releaseErr := s.taskRepo.ReleaseSettlementClaim(ctx, task.ID, claimStartedAt); releaseErr != nil {
+				return errors.Join(
+					fmt.Errorf("failed to settle share pool task %d: %w", task.ID, err),
+					fmt.Errorf("failed to release settlement claim for task %d: %w", task.ID, releaseErr),
+				)
+			}
+
+			return fmt.Errorf("failed to settle share pool task %d: %w", task.ID, err)
+		}
+
+		if err := s.taskRepo.MarkSettled(ctx, task.ID, claimStartedAt, time.Now().UTC()); err != nil {
+			if releaseErr := s.taskRepo.ReleaseSettlementClaim(ctx, task.ID, claimStartedAt); releaseErr != nil {
+				return errors.Join(
+					fmt.Errorf("failed to mark share pool task %d settled: %w", task.ID, err),
+					fmt.Errorf("failed to release settlement claim for task %d: %w", task.ID, releaseErr),
+				)
+			}
+
+			return fmt.Errorf("failed to mark share pool task %d settled: %w", task.ID, err)
+		}
+	}
 }
 
 func (s *CampaignService) GetLeaderboard(ctx context.Context, taskName string, period int) ([]models.LeaderboardEntry, error) {

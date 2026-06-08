@@ -10,6 +10,7 @@ import (
 
 type ITaskHistoryRepository interface {
 	Create(ctx context.Context, taskHistory *entities.TaskHistory) (*entities.TaskHistory, error)
+	Upsert(ctx context.Context, taskHistory *entities.TaskHistory) (*entities.TaskHistory, error)
 	FindByID(ctx context.Context, id int64) (*entities.TaskHistory, error)
 	FindByAddressAndTaskId(ctx context.Context, address string, taskId int64) (*entities.TaskHistory, error)
 	GetByAddressIncludingTasks(ctx context.Context, address string) ([]*models.TaskTaskHistoryPair, error)
@@ -46,6 +47,35 @@ func (r *TaskHistoryRepository) Create(ctx context.Context, taskHistory *entitie
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task record: %w", err)
+	}
+
+	return &result, nil
+}
+
+func (r *TaskHistoryRepository) Upsert(ctx context.Context, taskHistory *entities.TaskHistory) (*entities.TaskHistory, error) {
+	query := `
+		INSERT INTO task_histories (address, task_id, reward_points, amount, completed_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		ON CONFLICT (address, task_id) DO UPDATE
+		SET reward_points = EXCLUDED.reward_points,
+			amount = EXCLUDED.amount,
+			completed_at = EXCLUDED.completed_at,
+			updated_at = CURRENT_TIMESTAMP
+		RETURNING id, address, task_id, reward_points, amount, completed_at, created_at, updated_at
+	`
+
+	var result entities.TaskHistory
+	err := r.db.QueryRowContext(
+		ctx,
+		query,
+		taskHistory.Address, taskHistory.TaskID, taskHistory.RewardPoints,
+		taskHistory.Amount, taskHistory.CompletedAt,
+	).Scan(
+		&result.ID, &result.Address, &result.TaskID, &result.RewardPoints,
+		&result.Amount, &result.CompletedAt, &result.CreatedAt, &result.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upsert task record: %w", err)
 	}
 
 	return &result, nil

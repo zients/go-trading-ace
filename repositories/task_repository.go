@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 	"trading-ace/entities"
 	"trading-ace/models"
 )
@@ -16,6 +17,9 @@ type ITaskRepository interface {
 	GetByName(ctx context.Context, name string) ([]*entities.Task, error)
 	IsExistedByName(ctx context.Context, name string) (bool, error)
 	GetByAddressAndNamesIncludingTaskHistories(ctx context.Context, address string, names []string) ([]*models.TaskWithTaskHistory, error)
+	ClaimDueSharePoolTask(ctx context.Context, now time.Time) (*entities.Task, error)
+	MarkSettled(ctx context.Context, id int64, claimStartedAt time.Time, settledAt time.Time) error
+	ReleaseSettlementClaim(ctx context.Context, id int64, claimStartedAt time.Time) error
 }
 
 type TaskRepository struct {
@@ -213,4 +217,90 @@ func (t *TaskRepository) GetByAddressAndNamesIncludingTaskHistories(ctx context.
 	}
 
 	return results, nil
+}
+
+func (t *TaskRepository) ClaimDueSharePoolTask(ctx context.Context, now time.Time) (*entities.Task, error) {
+	query := `
+		UPDATE tasks
+		SET settlement_started_at = $2, updated_at = CURRENT_TIMESTAMP
+		WHERE id = (
+			SELECT id
+			FROM tasks
+			WHERE name = $1
+				AND end_at <= $2
+				AND settled_at IS NULL
+				AND (
+					settlement_started_at IS NULL
+					OR settlement_started_at <= $2 - INTERVAL '2 hours'
+				)
+			ORDER BY end_at, period
+			LIMIT 1
+			FOR UPDATE SKIP LOCKED
+		)
+		RETURNING id, name, description, points, started_at, end_at, period, created_at, updated_at,
+			settlement_started_at, settled_at
+	`
+
+	task := &entities.Task{}
+	err := t.db.QueryRowContext(ctx, query, "SharePoolTask", now).Scan(
+		&task.ID, &task.Name, &task.Description, &task.Points,
+		&task.StartedAt, &task.EndAt, &task.Period,
+		&task.CreatedAt, &task.UpdatedAt,
+		&task.SettlementStartedAt, &task.SettledAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("failed to claim due share pool task: %w", err)
+	}
+
+	return task, nil
+}
+
+func (t *TaskRepository) MarkSettled(ctx context.Context, id int64, claimStartedAt time.Time, settledAt time.Time) error {
+	query := `
+		UPDATE tasks
+		SET settled_at = $3, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1 AND settlement_started_at = $2 AND settled_at IS NULL
+	`
+
+	result, err := t.db.ExecContext(ctx, query, id, claimStartedAt, settledAt)
+	if err != nil {
+		return fmt.Errorf("failed to mark task settled: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check settled task update result: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("settlement claim does not match task %d", id)
+	}
+
+	return nil
+}
+
+func (t *TaskRepository) ReleaseSettlementClaim(ctx context.Context, id int64, claimStartedAt time.Time) error {
+	query := `
+		UPDATE tasks
+		SET settlement_started_at = NULL, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1 AND settlement_started_at = $2 AND settled_at IS NULL
+	`
+
+	result, err := t.db.ExecContext(ctx, query, id, claimStartedAt)
+	if err != nil {
+		return fmt.Errorf("failed to release settlement claim: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check settlement claim release result: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("settlement claim does not match task %d", id)
+	}
+
+	return nil
 }

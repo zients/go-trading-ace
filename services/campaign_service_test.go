@@ -46,7 +46,7 @@ func TestGetPointHistories(t *testing.T) {
 	// 設置 mock 返回值
 	taskHistoryRepoMock.On("GetByAddressIncludingTasks", mock.Anything, "address1").Return(taskHistoryMock, nil)
 
-	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock, context.Background())
+	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock)
 	result, err := svc.GetPointHistories(context.Background(), "address1")
 
 	// 驗證結果
@@ -80,7 +80,7 @@ func TestGetTaskStatus(t *testing.T) {
 	taskRepoMock.On("GetByAddressAndNamesIncludingTaskHistories", mock.Anything, "address1", []string{OnboardingTaskStr, SharePoolTaskStr}).
 		Return(taskWithHistoryMock, nil)
 
-	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock, context.Background())
+	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock)
 	result, err := svc.GetTaskStatus(context.Background(), "address1")
 
 	// 驗證結果
@@ -107,7 +107,7 @@ func TestGetTaskStatusPropagatesContextToRepository(t *testing.T) {
 		[]string{OnboardingTaskStr, SharePoolTaskStr},
 	).Return([]*models.TaskWithTaskHistory{}, nil).Once()
 
-	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock, context.Background())
+	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock)
 	result, err := svc.GetTaskStatus(ctx, "address1")
 
 	assert.NoError(t, err)
@@ -130,11 +130,8 @@ func TestStartCampaign(t *testing.T) {
 	taskRepoMock.On("GetByName", mock.Anything, SharePoolTaskStr).Return([]*entities.Task{}, nil)
 	taskRepoMock.On("Create", mock.Anything, mock.Anything).Return(&entities.Task{}, nil)
 
-	// 模擬 logger 的行為
-	loggerMock.On("Info", mock.Anything).Return()
-
 	// 呼叫 StartCampaign 方法
-	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock, context.Background())
+	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock)
 	err := svc.StartCampaign(context.Background())
 
 	// 驗證結果
@@ -148,8 +145,7 @@ func TestStartCampaign(t *testing.T) {
 	taskRepoMock.AssertCalled(t, "GetByName", mock.Anything, SharePoolTaskStr)
 	taskRepoMock.AssertCalled(t, "Create", mock.Anything, mock.Anything)
 
-	// 驗證 logger 是否有記錄啟動計劃
-	loggerMock.AssertCalled(t, "Info", mock.Anything)
+	loggerMock.AssertNotCalled(t, "Info", mock.Anything)
 }
 
 func TestStartCampaignReturnsNoErrorWhenCampaignTasksAlreadyExist(t *testing.T) {
@@ -168,15 +164,14 @@ func TestStartCampaignReturnsNoErrorWhenCampaignTasksAlreadyExist(t *testing.T) 
 
 	taskRepoMock.On("IsExistedByName", mock.Anything, OnboardingTaskStr).Return(true, nil).Once()
 	taskRepoMock.On("GetByName", mock.Anything, SharePoolTaskStr).Return(existingSharePoolTasks, nil).Once()
-	loggerMock.On("Info", mock.Anything).Return().Once()
 
-	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock, context.Background())
+	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock)
 	err := svc.StartCampaign(context.Background())
 
 	assert.NoError(t, err)
 	taskRepoMock.AssertNotCalled(t, "Create", mock.Anything)
 	taskRepoMock.AssertExpectations(t)
-	loggerMock.AssertExpectations(t)
+	loggerMock.AssertNotCalled(t, "Info", mock.Anything)
 }
 
 func TestStartCampaignReturnsErrorWhenExistingSharePoolTasksAreIncomplete(t *testing.T) {
@@ -194,7 +189,7 @@ func TestStartCampaignReturnsErrorWhenExistingSharePoolTasksAreIncomplete(t *tes
 	taskRepoMock.On("IsExistedByName", mock.Anything, OnboardingTaskStr).Return(true, nil).Once()
 	taskRepoMock.On("GetByName", mock.Anything, SharePoolTaskStr).Return(incompleteSharePoolTasks, nil).Once()
 
-	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock, context.Background())
+	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock)
 	err := svc.StartCampaign(context.Background())
 
 	assert.Error(t, err)
@@ -204,7 +199,7 @@ func TestStartCampaignReturnsErrorWhenExistingSharePoolTasksAreIncomplete(t *tes
 	loggerMock.AssertExpectations(t)
 }
 
-func TestStartCampaignDoesNotStartDuplicateScheduler(t *testing.T) {
+func TestStartCampaignDoesNotStartSettlementWorker(t *testing.T) {
 	cfg := &config.Config{}
 	loggerMock := &mocks.MockLogger{}
 	taskHistoryRepoMock := &mocks.MockTaskHistoryRepository{}
@@ -221,19 +216,143 @@ func TestStartCampaignDoesNotStartDuplicateScheduler(t *testing.T) {
 	taskRepoMock.On("IsExistedByName", mock.Anything, OnboardingTaskStr).Return(false, nil).Once()
 	taskRepoMock.On("Create", mock.Anything, mock.Anything).Return(&entities.Task{}, nil).Times(5)
 	taskRepoMock.On("GetByName", mock.Anything, SharePoolTaskStr).Return([]*entities.Task{}, nil).Once()
-	loggerMock.On("Info", mock.Anything).Return().Once()
 
 	taskRepoMock.On("IsExistedByName", mock.Anything, OnboardingTaskStr).Return(true, nil).Once()
 	taskRepoMock.On("GetByName", mock.Anything, SharePoolTaskStr).Return(existingSharePoolTasks, nil).Once()
 
-	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock, context.Background())
+	svc := NewCampaignService(cfg, loggerMock, taskHistoryRepoMock, taskRepoMock, redisHelperMock)
 
 	assert.NoError(t, svc.StartCampaign(context.Background()))
 	assert.NoError(t, svc.StartCampaign(context.Background()))
 
 	taskRepoMock.AssertNumberOfCalls(t, "Create", 5)
-	loggerMock.AssertNumberOfCalls(t, "Info", 1)
+	loggerMock.AssertNotCalled(t, "Info", mock.Anything)
 	taskRepoMock.AssertExpectations(t)
+}
+
+func TestSettleDueSharePoolTasksClaimsDueTaskAndMarksSettled(t *testing.T) {
+	mockRedisHelper := new(mocks.MockRedisHelper)
+	mockTaskRepo := new(mocks.MockTaskRepository)
+	mockTaskHistoryRepo := new(mocks.MockTaskHistoryRepository)
+	loggerMock := new(mocks.MockLogger)
+	ctx := context.WithValue(context.Background(), struct{}{}, "settlement-context")
+	claimStartedAt := time.Now().UTC()
+	dueTask := &entities.Task{
+		ID:                  7,
+		Name:                SharePoolTaskStr,
+		Period:              2,
+		Points:              SharePoolTaskPoints,
+		SettlementStartedAt: &claimStartedAt,
+	}
+	key := "SharePoolTask_2"
+
+	service := &CampaignService{
+		logger:          loggerMock,
+		redisHelper:     mockRedisHelper,
+		taskRepo:        mockTaskRepo,
+		taskHistoryRepo: mockTaskHistoryRepo,
+	}
+
+	mockTaskRepo.On("ClaimDueSharePoolTask", sameContext(ctx), mock.AnythingOfType("time.Time")).
+		Return(dueTask, nil).Once()
+	mockRedisHelper.On("HGetAll", sameContext(ctx), key).Return(map[string]string{
+		"0xA": "1000",
+		"0xB": "3000",
+	}, nil).Once()
+	mockRedisHelper.On("Get", sameContext(ctx), key+"_total").Return("4000", nil).Once()
+	mockTaskHistoryRepo.On("Upsert", sameContext(ctx), mock.AnythingOfType("*entities.TaskHistory")).
+		Return(&entities.TaskHistory{}, nil).Twice()
+	mockRedisHelper.On("ZAdd", sameContext(ctx), key+"_rank", mock.Anything).Return(nil).Twice()
+	mockTaskRepo.On("MarkSettled", sameContext(ctx), dueTask.ID, claimStartedAt, mock.AnythingOfType("time.Time")).
+		Return(nil).Once()
+	mockTaskRepo.On("ClaimDueSharePoolTask", sameContext(ctx), mock.AnythingOfType("time.Time")).
+		Return(nil, nil).Once()
+
+	err := service.SettleDueSharePoolTasks(ctx)
+
+	assert.NoError(t, err)
+	mockTaskRepo.AssertExpectations(t)
+	mockRedisHelper.AssertExpectations(t)
+	mockTaskHistoryRepo.AssertExpectations(t)
+	loggerMock.AssertExpectations(t)
+}
+
+func TestSettleDueSharePoolTasksReleasesClaimWhenCalculationFails(t *testing.T) {
+	mockRedisHelper := new(mocks.MockRedisHelper)
+	mockTaskRepo := new(mocks.MockTaskRepository)
+	mockTaskHistoryRepo := new(mocks.MockTaskHistoryRepository)
+	loggerMock := new(mocks.MockLogger)
+	ctx := context.Background()
+	claimStartedAt := time.Now().UTC()
+	dueTask := &entities.Task{
+		ID:                  7,
+		Name:                SharePoolTaskStr,
+		Period:              2,
+		Points:              SharePoolTaskPoints,
+		SettlementStartedAt: &claimStartedAt,
+	}
+	key := "SharePoolTask_2"
+
+	service := &CampaignService{
+		logger:          loggerMock,
+		redisHelper:     mockRedisHelper,
+		taskRepo:        mockTaskRepo,
+		taskHistoryRepo: mockTaskHistoryRepo,
+	}
+
+	mockTaskRepo.On("ClaimDueSharePoolTask", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return(dueTask, nil).Once()
+	mockRedisHelper.On("HGetAll", mock.Anything, key).Return(map[string]string{"0xA": "1000"}, nil).Once()
+	mockRedisHelper.On("Get", mock.Anything, key+"_total").Return("", errors.New("missing total")).Once()
+	mockTaskRepo.On("ReleaseSettlementClaim", mock.Anything, dueTask.ID, claimStartedAt).Return(nil).Once()
+
+	err := service.SettleDueSharePoolTasks(ctx)
+
+	assert.ErrorContains(t, err, "missing total")
+	mockTaskRepo.AssertExpectations(t)
+	mockRedisHelper.AssertExpectations(t)
+	mockTaskHistoryRepo.AssertExpectations(t)
+	loggerMock.AssertExpectations(t)
+}
+
+func TestSettleDueSharePoolTasksMarksNoVolumeTaskSettled(t *testing.T) {
+	mockRedisHelper := new(mocks.MockRedisHelper)
+	mockTaskRepo := new(mocks.MockTaskRepository)
+	mockTaskHistoryRepo := new(mocks.MockTaskHistoryRepository)
+	loggerMock := new(mocks.MockLogger)
+	ctx := context.Background()
+	claimStartedAt := time.Now().UTC()
+	dueTask := &entities.Task{
+		ID:                  7,
+		Name:                SharePoolTaskStr,
+		Period:              2,
+		Points:              SharePoolTaskPoints,
+		SettlementStartedAt: &claimStartedAt,
+	}
+	key := "SharePoolTask_2"
+
+	service := &CampaignService{
+		logger:          loggerMock,
+		redisHelper:     mockRedisHelper,
+		taskRepo:        mockTaskRepo,
+		taskHistoryRepo: mockTaskHistoryRepo,
+	}
+
+	mockTaskRepo.On("ClaimDueSharePoolTask", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return(dueTask, nil).Once()
+	mockRedisHelper.On("HGetAll", mock.Anything, key).Return(map[string]string{}, nil).Once()
+	mockTaskRepo.On("MarkSettled", mock.Anything, dueTask.ID, claimStartedAt, mock.AnythingOfType("time.Time")).
+		Return(nil).Once()
+	mockTaskRepo.On("ClaimDueSharePoolTask", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return(nil, nil).Once()
+
+	err := service.SettleDueSharePoolTasks(ctx)
+
+	assert.NoError(t, err)
+	mockTaskRepo.AssertExpectations(t)
+	mockRedisHelper.AssertExpectations(t)
+	mockRedisHelper.AssertNotCalled(t, "Get", mock.Anything, key+"_total")
+	mockTaskHistoryRepo.AssertExpectations(t)
 	loggerMock.AssertExpectations(t)
 }
 
@@ -461,7 +580,6 @@ func TestRecordUSDCSwapTotalAmountPropagatesContextToDependencies(t *testing.T) 
 		redisHelper:     mockRedisHelper,
 		taskRepo:        mockTaskRepo,
 		taskHistoryRepo: mockTaskHistoryRepo,
-		workerCtx:       context.Background(),
 	}
 
 	now := time.Now()
