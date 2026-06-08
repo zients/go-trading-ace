@@ -258,10 +258,7 @@ func (s *CampaignService) FindCurrentSharePoolTask(ctx context.Context) (*entiti
 	key := "curr_shared_pool_task"
 	redisData, err := s.redisHelper.Get(ctx, key)
 	if err == nil {
-		task := &entities.Task{}
-		json.Unmarshal([]byte(redisData), &task)
-
-		return task, nil
+		return decodeCachedTask(redisData, "current share pool task")
 	}
 
 	tasks, err := s.taskRepo.GetByName(ctx, SharePoolTaskStr)
@@ -272,8 +269,9 @@ func (s *CampaignService) FindCurrentSharePoolTask(ctx context.Context) (*entiti
 	now := time.Now().UTC()
 	for _, task := range tasks {
 		if task.StartedAt != nil && task.EndAt != nil && now.After(*task.StartedAt) && now.Before(*task.EndAt) {
-			encodedTask, _ := json.Marshal(task)
-			s.redisHelper.Set(ctx, key, string(encodedTask), time.Until(*task.EndAt))
+			if err := s.cacheTask(ctx, key, task, "current share pool task"); err != nil {
+				return nil, err
+			}
 
 			return task, nil
 		}
@@ -286,10 +284,7 @@ func (s *CampaignService) FindOnboardingTask(ctx context.Context) (*entities.Tas
 	key := "onboarding_task"
 	redisData, err := s.redisHelper.Get(ctx, key)
 	if err == nil {
-		task := &entities.Task{}
-		json.Unmarshal([]byte(redisData), &task)
-
-		return task, nil
+		return decodeCachedTask(redisData, "onboarding task")
 	}
 
 	task, err := s.taskRepo.FindByName(ctx, OnboardingTaskStr)
@@ -297,10 +292,45 @@ func (s *CampaignService) FindOnboardingTask(ctx context.Context) (*entities.Tas
 		return nil, fmt.Errorf("failed to fetch onboarding task: %w", err)
 	}
 
-	encodedTask, _ := json.Marshal(task)
-	s.redisHelper.Set(ctx, key, string(encodedTask), time.Until(*task.EndAt))
+	if err := s.cacheTask(ctx, key, task, "onboarding task"); err != nil {
+		return nil, err
+	}
 
 	return task, nil
+}
+
+func decodeCachedTask(redisData string, label string) (*entities.Task, error) {
+	task := &entities.Task{}
+	if err := json.Unmarshal([]byte(redisData), task); err != nil {
+		return nil, fmt.Errorf("failed to decode %s cache: %w", label, err)
+	}
+
+	if task.Name == "" {
+		return nil, fmt.Errorf("failed to decode %s cache: task name is empty", label)
+	}
+
+	return task, nil
+}
+
+func (s *CampaignService) cacheTask(ctx context.Context, key string, task *entities.Task, label string) error {
+	if task == nil {
+		return fmt.Errorf("failed to cache %s: task is nil", label)
+	}
+
+	if task.EndAt == nil {
+		return fmt.Errorf("failed to cache %s: task end time is missing", label)
+	}
+
+	encodedTask, err := json.Marshal(task)
+	if err != nil {
+		return fmt.Errorf("failed to encode %s cache: %w", label, err)
+	}
+
+	if err := s.redisHelper.Set(ctx, key, string(encodedTask), time.Until(*task.EndAt)); err != nil {
+		return fmt.Errorf("failed to cache %s: %w", label, err)
+	}
+
+	return nil
 }
 
 func (s *CampaignService) startLimitedWeeklySettlementScheduler(tasks []*entities.Task) {

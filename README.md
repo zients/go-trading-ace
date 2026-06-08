@@ -19,6 +19,7 @@ This repository is positioned as a portfolio prototype. It focuses on showing th
 ```text
 Uniswap USDC/WETH Swap event
   -> Ethereum listener
+  -> Transaction sender lookup
   -> USDC amount extraction
   -> Campaign service
   -> Redis volume accumulation
@@ -168,6 +169,7 @@ Not production-ready yet:
 
 - Event listener reconnect/backoff behavior.
 - Historical backfill and event deduplication.
+- Participant attribution uses transaction sender (`tx.from`); aggregators and smart contract wallets may require deeper trace-based attribution.
 - Durable settlement worker state.
 - Multi-instance locking for reward settlement.
 - Automated database migrations during container startup.

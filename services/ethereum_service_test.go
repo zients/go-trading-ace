@@ -10,8 +10,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseABI(t *testing.T) {
@@ -105,6 +107,7 @@ func TestRetrieveEventData(t *testing.T) {
 	assert.Equal(t, event.Amount1In, expectedEvent.Amount1In)
 	assert.Equal(t, event.Amount0Out, expectedEvent.Amount0Out)
 	assert.Equal(t, event.Amount1Out, expectedEvent.Amount1Out)
+	assert.Equal(t, vLog.TxHash, event.TxHash)
 
 	// Verify that UnpackIntoInterface was called with correct parameters
 	mockABI.AssertExpectations(t)
@@ -117,12 +120,17 @@ func TestProcessSwapEvent(t *testing.T) {
 	// Set up mocks
 	mockLogger := new(mocks.MockLogger)
 	mockCampaignService := new(mocks.MockCampaignService)
+	mockClient := new(mocks.MockEthereumClient)
+	ctx := context.WithValue(context.Background(), struct{}{}, "swap-context")
+	txHash := common.HexToHash("0x1234")
+	signedTx, transactionSender := signedMainnetTransaction(t)
 
 	// Mock logger behavior
 	mockLogger.On("Info", mock.Anything).Return()
 
 	// Mock RecordUSDCSwapTotalAmount behavior
-	mockCampaignService.On("RecordUSDCSwapTotalAmount", mock.Anything, "0xSenderAddress", mock.Anything).Return(100.0, nil)
+	mockClient.On("TransactionByHash", sameContext(ctx), txHash).Return(signedTx, false, nil).Once()
+	mockCampaignService.On("RecordUSDCSwapTotalAmount", sameContext(ctx), transactionSender.Hex(), 0.00002).Return(100.0, nil).Once()
 
 	// Create EthereumService instance
 	e := &EthereumService{
@@ -131,7 +139,8 @@ func TestProcessSwapEvent(t *testing.T) {
 	}
 
 	event := &models.SwapEvent{
-		SenderAddress: "0xSenderAddress",
+		SenderAddress: "0xRouterAddress",
+		TxHash:        txHash,
 		Amount0In:     big.NewInt(10),
 		Amount0Out:    big.NewInt(10),
 		Amount1In:     big.NewInt(10),
@@ -139,24 +148,30 @@ func TestProcessSwapEvent(t *testing.T) {
 	}
 
 	// Test processSwapEvent
-	err := e.processSwapEvent(context.Background(), event)
+	err := e.processSwapEvent(ctx, mockClient, event)
 	assert.NoError(t, err, "expected no error")
 
 	// Verify expectations
 	mockLogger.AssertExpectations(t)
+	mockClient.AssertExpectations(t)
 	mockCampaignService.AssertExpectations(t)
 
 	// Additional assertions for verifying specific behaviors
-	mockCampaignService.AssertCalled(t, "RecordUSDCSwapTotalAmount", mock.Anything, "0xSenderAddress", mock.Anything)
+	mockCampaignService.AssertNumberOfCalls(t, "RecordUSDCSwapTotalAmount", 1)
 }
 
 func TestProcessSwapEventReturnsErrorWhenCampaignRecordingFails(t *testing.T) {
 	mockLogger := new(mocks.MockLogger)
 	mockCampaignService := new(mocks.MockCampaignService)
+	mockClient := new(mocks.MockEthereumClient)
+	ctx := context.Background()
+	txHash := common.HexToHash("0xabcd")
+	signedTx, transactionSender := signedMainnetTransaction(t)
 
 	mockLogger.On("Info", mock.Anything).Return()
-	mockCampaignService.On("RecordUSDCSwapTotalAmount", mock.Anything, "0xSenderAddress", mock.Anything).
-		Return(0.0, fmt.Errorf("record failed"))
+	mockClient.On("TransactionByHash", mock.Anything, txHash).Return(signedTx, false, nil).Once()
+	mockCampaignService.On("RecordUSDCSwapTotalAmount", mock.Anything, transactionSender.Hex(), 0.00002).
+		Return(0.0, fmt.Errorf("record failed")).Once()
 
 	e := &EthereumService{
 		logger:          mockLogger,
@@ -164,16 +179,137 @@ func TestProcessSwapEventReturnsErrorWhenCampaignRecordingFails(t *testing.T) {
 	}
 
 	event := &models.SwapEvent{
-		SenderAddress: "0xSenderAddress",
+		SenderAddress: "0xRouterAddress",
+		TxHash:        txHash,
 		Amount0In:     big.NewInt(10),
 		Amount0Out:    big.NewInt(10),
 		Amount1In:     big.NewInt(10),
 		Amount1Out:    big.NewInt(10),
 	}
 
-	err := e.processSwapEvent(context.Background(), event)
+	err := e.processSwapEvent(ctx, mockClient, event)
 
 	assert.ErrorContains(t, err, "record failed")
 	mockLogger.AssertExpectations(t)
+	mockClient.AssertExpectations(t)
 	mockCampaignService.AssertExpectations(t)
+}
+
+func TestProcessSwapEventRecordsTransactionSenderOnceWithCombinedUSDCAmount(t *testing.T) {
+	mockLogger := new(mocks.MockLogger)
+	mockCampaignService := new(mocks.MockCampaignService)
+	mockClient := new(mocks.MockEthereumClient)
+	ctx := context.WithValue(context.Background(), struct{}{}, "participant-context")
+	txHash := common.HexToHash("0xbeef")
+	signedTx, transactionSender := signedMainnetTransaction(t)
+
+	mockLogger.On("Info", mock.Anything).Return()
+	mockClient.On("TransactionByHash", sameContext(ctx), txHash).Return(signedTx, false, nil).Once()
+	mockCampaignService.On("RecordUSDCSwapTotalAmount", sameContext(ctx), transactionSender.Hex(), 1000.0).
+		Return(1000.0, nil).Once()
+
+	e := &EthereumService{
+		logger:          mockLogger,
+		campaignService: mockCampaignService,
+	}
+
+	event := &models.SwapEvent{
+		SenderAddress: "0x000000000000000000000000000000000000dEaD",
+		TxHash:        txHash,
+		Amount0In:     big.NewInt(250_000000),
+		Amount0Out:    big.NewInt(750_000000),
+		Amount1In:     big.NewInt(0),
+		Amount1Out:    big.NewInt(0),
+	}
+
+	err := e.processSwapEvent(ctx, mockClient, event)
+
+	assert.NoError(t, err)
+	mockCampaignService.AssertExpectations(t)
+	mockCampaignService.AssertNumberOfCalls(t, "RecordUSDCSwapTotalAmount", 1)
+	mockClient.AssertExpectations(t)
+	mockLogger.AssertExpectations(t)
+}
+
+func TestProcessSwapEventSkipsZeroUSDCAmount(t *testing.T) {
+	mockLogger := new(mocks.MockLogger)
+	mockCampaignService := new(mocks.MockCampaignService)
+	mockClient := new(mocks.MockEthereumClient)
+	txHash := common.HexToHash("0xcafe")
+
+	mockLogger.On("Info", mock.Anything).Return()
+
+	e := &EthereumService{
+		logger:          mockLogger,
+		campaignService: mockCampaignService,
+	}
+
+	event := &models.SwapEvent{
+		SenderAddress: "0x000000000000000000000000000000000000dEaD",
+		TxHash:        txHash,
+		Amount0In:     big.NewInt(0),
+		Amount0Out:    big.NewInt(0),
+		Amount1In:     big.NewInt(10),
+		Amount1Out:    big.NewInt(10),
+	}
+
+	err := e.processSwapEvent(context.Background(), mockClient, event)
+
+	assert.NoError(t, err)
+	mockCampaignService.AssertNotCalled(t, "RecordUSDCSwapTotalAmount", mock.Anything, mock.Anything, mock.Anything)
+	mockClient.AssertNotCalled(t, "TransactionByHash", mock.Anything, mock.Anything)
+	mockLogger.AssertExpectations(t)
+}
+
+func TestProcessSwapEventReturnsErrorWhenTransactionIsMissing(t *testing.T) {
+	mockLogger := new(mocks.MockLogger)
+	mockCampaignService := new(mocks.MockCampaignService)
+	mockClient := new(mocks.MockEthereumClient)
+	txHash := common.HexToHash("0xfeed")
+
+	mockLogger.On("Info", mock.Anything).Return()
+	mockClient.On("TransactionByHash", mock.Anything, txHash).Return(nil, false, nil).Once()
+
+	e := &EthereumService{
+		logger:          mockLogger,
+		campaignService: mockCampaignService,
+	}
+
+	event := &models.SwapEvent{
+		SenderAddress: "0x000000000000000000000000000000000000dEaD",
+		TxHash:        txHash,
+		Amount0In:     big.NewInt(1),
+		Amount0Out:    big.NewInt(0),
+		Amount1In:     big.NewInt(0),
+		Amount1Out:    big.NewInt(0),
+	}
+
+	err := e.processSwapEvent(context.Background(), mockClient, event)
+
+	assert.ErrorContains(t, err, "swap transaction not found")
+	mockCampaignService.AssertNotCalled(t, "RecordUSDCSwapTotalAmount", mock.Anything, mock.Anything, mock.Anything)
+	mockClient.AssertExpectations(t)
+	mockLogger.AssertExpectations(t)
+}
+
+func signedMainnetTransaction(t *testing.T) (*types.Transaction, common.Address) {
+	t.Helper()
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+
+	transactionSender := crypto.PubkeyToAddress(privateKey.PublicKey)
+	tx := types.NewTransaction(
+		0,
+		common.HexToAddress("0x0000000000000000000000000000000000000001"),
+		big.NewInt(0),
+		21_000,
+		big.NewInt(1),
+		nil,
+	)
+
+	signedTx, err := types.SignTx(tx, types.LatestSignerForChainID(big.NewInt(1)), privateKey)
+	require.NoError(t, err)
+
+	return signedTx, transactionSender
 }
